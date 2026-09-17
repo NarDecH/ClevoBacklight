@@ -1,0 +1,67 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller numpy pillow pystray soundcard comtypes
+
+      - name: Run offline test suite
+        shell: cmd
+        run: test_all.bat
+
+      - name: Build one-file exe
+        shell: cmd
+        run: |
+          python -m PyInstaller --noconfirm --clean ClevoBacklight.spec
+          dist\ClevoBacklight.exe --selftest
+
+      - name: Install Inno Setup
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: cmd
+        run: |
+          for /f "delims=" %%V in ('powershell -NoProfile -Command "(Get-Content CHANGELOG.md -TotalCount 10 | Select-String '## \[([0-9.]+)\]').Matches[0].Groups[1].Value"') do set VER=%%V
+          echo Building version %VER%
+          "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DMyAppVersion=%VER% installer.iss
+          release.bat %VER%
+
+      - name: Upload build artifact (non-tag runs)
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClevoBacklight-exe
+          path: dist/ClevoBacklight.exe
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ClevoBacklight-v*.zip
+            dist/ClevoBacklight-Setup-*.exe
+          generate_release_notes: true

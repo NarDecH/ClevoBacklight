@@ -1,8 +1,20 @@
 # Clevo N957TP6 Keyboard Backlight Controller
 
+[![Build & Release](https://github.com/NarDecH/ClevoBacklight/actions/workflows/release.yml/badge.svg)](https://github.com/NarDecH/ClevoBacklight/actions/workflows/release.yml)
+[![Release](https://img.shields.io/github/v/release/NarDecH/ClevoBacklight)](https://github.com/NarDecH/ClevoBacklight/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)](https://github.com/NarDecH/ClevoBacklight)
+[![Python](https://img.shields.io/badge/python-3.12-yellow)](https://github.com/NarDecH/ClevoBacklight)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 ชุดเครื่องมือควบคุมแสงไฟคีย์บอร์ด (backlight / RGB 3 โซน) สำหรับ Clevo N957TP6 / N9xTP6 ที่ใช้ BIOS ดัดแปลง (dsanke) บน Windows — สั่งงาน EC (Embedded Controller) โดยตรงผ่านไดรเวอร์ WinRing0 ไม่ต้องพึ่ง Control Center หรือ WMI ซึ่งใช้ไม่ได้บนเครื่องนี้
 
 **สถานะ: ใช้งานได้จริง ยืนยันบนฮาร์ดแวร์แล้ว** ✅ — สี 3 โซน, ความสว่าง 4 ระดับ, เปิด/ปิดไฟ ผ่านการทดสอบด้วยสายตาทั้งหมด (ดูรายละเอียดท้ายไฟล์)
+
+## ภาพหน้าตาโปรแกรม
+
+![Dashboard — มอนิเตอร์สด + รีโมต](docs/img/dashboard_hero.png)
+
+> ภาพจริงจาก Dashboard บนเครื่อง (เปิดจาก tray icon หรือ `http://127.0.0.1:8787` หลังรัน daemon) — แสดงการ์ดอุณหภูมิ/พัดลม, กราฟย้อนหลัง, แผงสลับโหมดเรียลไทม์ (Music/Ambient/Temp), Events viewer และแผงตั้งค่าแจ้งเตือน
 
 **ฟีเจอร์เด่น**
 

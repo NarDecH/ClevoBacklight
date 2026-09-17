@@ -340,7 +340,7 @@ class Daemon:
         by reading the latest GitHub release of `repo` (default: settings).
         """
         repo = repo or self.settings.get("updates", {}).get("repo") or \
-            "supermarsx/ClevoBacklight"
+            "NarDecH/ClevoBacklight"
         url = "https://api.github.com/repos/%s/releases/latest" % repo
         req = urllib.request.Request(url, headers={
             "Accept": "application/vnd.github+json",
