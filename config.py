@@ -104,7 +104,7 @@ DEFAULTS = {
     "updates": {"enabled": False, "repo": "", "interval_s": 21600},
 }
 
-APP_VERSION = "1.9.8"
+APP_VERSION = "1.9.9"
 
 MODES = ["custom", "breathe", "cycle", "random", "dance", "tempo", "flash", "wave"]
 
