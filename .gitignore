@@ -42,3 +42,5 @@ tools_acpica/
 tools_acpica.zip
 acpi_table_0_DSDT.aml
 .freebuff/
+events.jsonl
+daily_stats.json

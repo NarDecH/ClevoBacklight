@@ -19,3 +19,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+Additional notice (not part of the MIT license text):
+
+This project talks directly to the Embedded Controller of specific Clevo
+barebones and bundles the third-party WinRing0x64 driver binary for EC
+access. Fan/lighting control carries inherent risk; use at your own risk
+and check your machine's warranty terms before distributing builds that
+include the driver payload.
