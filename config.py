@@ -101,7 +101,7 @@ DEFAULTS = {
     "dashboard": {"enabled": True, "bind": "loopback", "token": "",
                   "serve_history_csv": True, "allow_control": False},
     "autostart": False,
-    "updates": {"enabled": False, "repo": "", "interval_s": 21600},
+    "updates": {"enabled": False, "repo": "NarDecH/ClevoBacklight", "interval_s": 21600},
 }
 
 APP_VERSION = "1.9.9"
