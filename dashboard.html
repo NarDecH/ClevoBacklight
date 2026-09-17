@@ -348,8 +348,25 @@ function checkUpdate(){
     .then(j => {
       if (!j) return;
       const el = $('updateChip');
-      if (j.update_available)
-        el.innerHTML = 'เวอร์ชันใหม่ <b>' + esc(j.latest) + '</b> มีให้อัปเดต';
+      if (j.update_available){
+        el.innerHTML = 'เวอร์ชันใหม่ <b>' + esc(j.latest) + '</b> มีให้อัปเดต '
+          + '<a class="chip" id="updateDl" href="#">⬇ ดาวน์โหลด</a>';
+        $('updateDl').onclick = (ev) => {
+          ev.preventDefault();
+          const btn = $('updateDl');
+          btn.textContent = '⬇ กำลังดาวน์โหลด…';
+          fetch('/api/update/download' + location.search, {method:'POST'})
+            .then(r => r.json().then(j2 => ({ok: r.ok, j: j2})))
+            .then(({ok, j}) => {
+              if (ok){
+                btn.textContent = '✓ ดาวน์โหลดแล้ว — ปิดโปรแกรมแล้วรัน zip ใหม่';
+              } else {
+                btn.textContent = '✗ ' + (j && j.error ? j.error : 'ดาวน์โหลดไม่สำเร็จ');
+              }
+            })
+            .catch(() => { btn.textContent = '✗ ดาวน์โหลดไม่สำเร็จ'; });
+        };
+      }
       else el.textContent = 'เวอร์ชันล่าสุดแล้ว (' + esc(j.current) + ')';
     }).catch(() => {});
 }

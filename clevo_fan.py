@@ -125,11 +125,21 @@ def read_fan_once(kb):
 
     Shape: {"cpu_rpm", "gpu_rpm", "cpu_duty_pct", "gpu_duty_pct"} —
     an absent fan (0 rpm + 0 duty) simply reports zeros.
+
+    Some EC firmwares (proven on this N9xTP6, 2026-09) mirror the single
+    real fan's tacho into BOTH RPM1 and RPM2. When both channels report
+    identical non-zero values we treat the GPU channel as absent so the
+    dashboard does not show a phantom second fan.
     """
     st = FanController(kb).status()
-    return {"cpu_rpm": st["cpu"]["rpm"], "gpu_rpm": st["gpu"]["rpm"],
+    mirrored = (0 < st["cpu"]["rpm"] == st["gpu"]["rpm"]
+                and st["cpu"]["duty_raw"] == st["gpu"]["duty_raw"])
+    gpu = st["gpu"]
+    if mirrored:
+        gpu = dict(gpu, rpm=0, duty_raw=0, duty_pct=0)
+    return {"cpu_rpm": st["cpu"]["rpm"], "gpu_rpm": gpu["rpm"],
             "cpu_duty_pct": st["cpu"]["duty_pct"],
-            "gpu_duty_pct": st["gpu"]["duty_pct"]}
+            "gpu_duty_pct": gpu["duty_pct"]}
 
 
 def watch_fan(fc, interval=1.0, stop_event=None, _test_ticks=None):

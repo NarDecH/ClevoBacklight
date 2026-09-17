@@ -310,6 +310,66 @@ def test_history_csv(tmp):
     print("history CSV OK")
 
 
+def test_update_download_endpoint(tmp):
+    """POST /api/update/download: 409 when up-to-date; background download
+    with the release zip URL when a newer version exists."""
+    import urllib.request
+    import urllib.error
+    status_path = os.path.join(tmp, "status.json")
+    hist_path = os.path.join(tmp, "history.json")
+    events_path = os.path.join(tmp, "events.jsonl")
+    old = (clevo_daemon.STATUS_PATH, clevo_daemon.HISTORY_PATH,
+           clevo_daemon.EVENTS_PATH)
+    clevo_daemon.STATUS_PATH = status_path
+    clevo_daemon.HISTORY_PATH = hist_path
+    clevo_daemon.EVENTS_PATH = events_path
+    srv = None
+    try:
+        d = make_daemon(tmp)
+        downloads = []
+        d.download_update = lambda url, dest=None: downloads.append(url)
+        port = d.start_status_server(port=0)
+        srv = d._dash_server
+        base = "http://127.0.0.1:%d" % port
+
+        # up-to-date -> 409, nothing downloaded
+        d.check_for_update = lambda: {"update_available": False,
+                                      "latest": "1.9.10", "url": "x"}
+        try:
+            urllib.request.urlopen(base + "/api/update/download",
+                                   data=b"{}", timeout=5)
+            raise AssertionError("409 expected when up-to-date")
+        except urllib.error.HTTPError as e:
+            assert e.code == 409, e.code
+        assert downloads == [], downloads
+
+        # newer release -> URL passed to download_update, event logged
+        d.check_for_update = lambda: {
+            "update_available": True, "latest": "9.9.9",
+            "url": "https://example.invalid/CB.zip"}
+        with urllib.request.urlopen(base + "/api/update/download",
+                                    data=b"{}", timeout=5) as r:
+            j = json.loads(r.read().decode("utf-8"))
+        assert j["ok"] and j["latest"] == "9.9.9", j
+        for _ in range(50):
+            if downloads:
+                break
+            time.sleep(0.05)
+        assert downloads == ["https://example.invalid/CB.zip"], downloads
+        evs = open(events_path, encoding="utf-8").read().strip().split("\n")
+        assert any('"download_requested"' in ln for ln in evs), evs[-3:]
+        print("dashboard /api/update/download OK")
+    finally:
+        (clevo_daemon.STATUS_PATH, clevo_daemon.HISTORY_PATH,
+         clevo_daemon.EVENTS_PATH) = old
+        if srv is not None:
+            try:
+                srv.shutdown()
+                srv.server_close()
+            except Exception:
+                pass
+
+
 def test_dashboard_history_csv_endpoint(tmp):
     """GET /api/history.csv returns the CSV body (or 404 when disabled)."""
     import urllib.request
@@ -771,6 +831,7 @@ def main():
     test_notifications_new_fields(tmp)
     test_fan_stall_logic(tmp)
     test_history_csv(tmp)
+    test_update_download_endpoint(tmp)
     test_dashboard_history_csv_endpoint(tmp)
     test_dashboard_handler(tmp)
     test_dashboard_token_and_lan_fallback(tmp)

@@ -2,6 +2,16 @@
 
 รูปแบบอ้างอิง [Keep a Changelog](https://keepachangelog.com/) — เวอร์ชันตามเสถียรภาพของฟีเจอร์ (ไม่มี release สาธารณะ ใช้ภายในเครื่อง)
 
+## [1.9.10] — 2026-09-17
+
+### Added
+- **ปุ่มดาวน์โหลดอัปเดตบน Dashboard** — เมื่อ `/api/update` เจอ release ใหม่กว่า ปุ่ม "⬇ ดาวน์โหลด" ใน chip เวอร์ชัน สั่ง daemon ดึง zip ของ release นั้นไว้ข้างโปรแกรม (background thread, ไม่ auto-install) ผ่าน `POST /api/update/download` — 409 เมื่ออัปเดตแล้ว, event log ทุกคำขอ
+- สคริปต์วินิจฉัยพัดลม `ec_fan_dump.py` / `ec_fan_loadtest.py` (อ่านอย่างเดียว)
+
+### Changed
+- **fan read**: EC ของเครื่องนี้ mirror tachometer พัดลมเดียวไปทั้งสองช่อง (พิสูจน์ด้วยการดัมพ์ raw) — `read_fan_once` ยุบช่อง GPU เป็น 0 เมื่อสองช่องเหมือนกันเป๊ะ เพื่อไม่ให้ Dashboard โชว์พัดลมหลอก
+- ตรวจสอบ mapping พัดลมซ้ำตาม DSDT: RPM1@0xD0/RPM2@0xD2 และ DUT1/2 ยังถูกต้อง — ค่าที่เพี้ยนช่วงก่อนคือ transient ของ tachometer ไม่ใช่บั๊กโปรแกรม
+
 ## [1.9.9] — 2026-09-17
 
 ### Added

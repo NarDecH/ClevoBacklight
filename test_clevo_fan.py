@@ -121,6 +121,19 @@ def test_read_fan_once_shape():
     print("read_fan_once shape OK")
 
 
+def test_read_fan_once_mirrored():
+    """EC mirror case: identical RPM + identical duty on both channels ->
+    the GPU fan is reported as absent (single-fan board), not phantom."""
+    kb = MockKB()
+    kb.ec.ram[REG_DUTY_GPU] = kb.ec.ram[REG_DUTY_CPU]      # mirror the duty
+    kb.ec.ram[0xD2], kb.ec.ram[0xD3] = 0x2E, 0x0B           # mirror the tacho
+    snap = clevo_fan.read_fan_once(kb)
+    assert snap["cpu_rpm"] == 2862 and snap["gpu_rpm"] == 0, snap
+    assert snap["gpu_duty_pct"] == 0, snap
+    assert kb.ec.writes == [], "read_fan_once must not write to the EC"
+    print("read_fan_once mirror-collapse OK")
+
+
 def main():
     test_rpm_decode()
     test_status()
@@ -128,6 +141,7 @@ def main():
     test_never_writes()
     test_watch_loop_reports_and_stops()
     test_read_fan_once_shape()
+    test_read_fan_once_mirrored()
     print("ALL FAN TESTS PASSED")
 
 

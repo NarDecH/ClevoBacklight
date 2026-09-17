@@ -1055,6 +1055,34 @@ class Daemon:
                     self.end_headers()
                     self.wfile.write(body)
                     return
+                if path == "/api/update/download":
+                    """Ask the daemon to fetch the newer release zip next to
+                    itself (background thread; the user still runs it)."""
+                    try:
+                        info = daemon.check_for_update()
+                    except Exception as exc:
+                        self._json_error(502, "update check failed: %s" % exc)
+                        return
+                    if not info.get("update_available"):
+                        self._json_error(409, "no update available (latest %s)"
+                                         % info.get("latest"))
+                        return
+                    url = info.get("url")
+                    if not url:
+                        self._json_error(502, "release has no download url")
+                        return
+                    threading.Thread(target=daemon.download_update,
+                                     args=(url,), daemon=True).start()
+                    elog(EV_UPDATE, action="download_requested", url=url)
+                    body = json.dumps({"ok": True, "url": url,
+                                       "latest": info.get("latest")}).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type",
+                                     "application/json; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 if path == "/api/notify-config":
                     if not cfg.get("allow_control", False):
                         self._json_error(403, "control disabled (dashboard.allow_control)")
