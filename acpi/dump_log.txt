@@ -1,0 +1,6 @@
+DSDT: size=0 err=1
+FACP: size=0 err=1
+APIC: size=0 err=1
+MCFG: size=0 err=1
+HPET: size=0 err=1
+SSDT: size=0 err=1

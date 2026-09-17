@@ -1,0 +1,44 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# --- PyInstaller ---
+build/
+dist/
+*.spec.bak
+# the release exe itself is an output; keep dist/ ignored but the folder exists
+selftest_ok.txt
+
+# --- user-local runtime state (never commit) ---
+settings.json
+settings.json.tmp
+status.json
+history.json
+daemon.log
+gui_smoke_test.log
+ec_mode_test.log
+*.dump.json
+
+# --- release artifacts ---
+ClevoBacklight-v*.zip
+ClevoBacklight-Setup-*.exe
+
+# --- OS / editor ---
+Thumbs.db
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# --- note: tools/WinRing0x64.sys IS tracked on purpose (build payload) ---
+
+# --- research artifacts (firmware/binary blobs stay local) ---
+bios/
+bios_extract/
+tools_acpica/
+tools_acpica.zip
+acpi_table_0_DSDT.aml
+.freebuff/

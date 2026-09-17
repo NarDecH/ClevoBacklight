@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clevo Backlight — Live Dashboard</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#2d3644;
+    --txt:#dbe4f0; --mut:#8b98a9; --acc:#00ff88; --warn:#ff9500; --bad:#ff3b30; --cool:#30b0c7;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{background:var(--bg); color:var(--txt); font-family:"Segoe UI",Tahoma,sans-serif; padding:24px}
+  h1{font-size:1.25rem; margin-bottom:2px}
+  .sub{color:var(--mut); font-size:.8rem; margin-bottom:18px}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin-bottom:16px}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px}
+  .card .k{color:var(--mut); font-size:.72rem; text-transform:uppercase; letter-spacing:.06em}
+  .card .v{font-size:1.55rem; font-weight:600; margin-top:4px; font-variant-numeric:tabular-nums}
+  .ok{color:var(--acc)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px}
+  .panel h2{font-size:.85rem; color:var(--mut); margin-bottom:10px; text-transform:uppercase; letter-spacing:.06em}
+  canvas{width:100%; height:110px; display:block}
+  .row{display:flex; gap:10px; flex-wrap:wrap; margin-top:6px}
+  .chip{background:var(--panel2); border:1px solid var(--line); border-radius:20px; padding:4px 12px; font-size:.78rem}
+  .chip.on{border-color:var(--acc); color:var(--acc)}
+  .chip.bad{border-color:var(--bad); color:var(--bad)}
+  a.chip{text-decoration:none}
+  button.chip{cursor:pointer; color:var(--txt); font-family:inherit}
+  button.chip:hover{border-color:var(--acc2); color:var(--acc2)}
+  table{width:100%; border-collapse:collapse; font-size:.8rem}
+  td,th{padding:5px 8px; border-bottom:1px solid var(--line); text-align:left}
+  th{color:var(--mut); font-weight:500}
+  .mono{font-family:Consolas,monospace}
+  footer{color:var(--mut); font-size:.72rem; margin-top:10px}
+</style>
+</head>
+<body>
+<h1>Clevo Backlight — Live Dashboard</h1>
+<div class="sub">daemon <span class="mono" id="ver">…</span> · refresh ทุก 5 วิ จาก <span class="mono">/api/status</span> · <span class="chip" id="updateChip">—</span></div>
+
+<div class="grid">
+  <div class="card"><div class="k">สถานะ EC</div><div class="v" id="ec">…</div></div>
+  <div class="card"><div class="k">อุณหภูมิ CPU</div><div class="v" id="temp">…</div></div>
+  <div class="card"><div class="k">พัดลม CPU</div><div class="v" id="fan">…</div><div class="k" id="fanduty" style="margin-top:4px"></div></div>
+  <div class="card"><div class="k">ไฟคีย์บอร์ด</div><div class="v" id="power">…</div></div>
+  <div class="card"><div class="k">Uptime (daemon)</div><div class="v" id="uptime">…</div></div>
+</div>
+
+<div class="panel"><h2>อุณหภูมิ CPU (ล่าสุด ~12 ชม. ตามช่วงเก็บ)</h2><canvas id="tempChart" width="900" height="110"></canvas></div>
+
+<div class="panel">
+  <h2>พัดลม CPU (RPM ย้อนหลัง + สถิติ) <a class="chip" id="csvBtn" href="/api/history.csv" download="clevo_history.csv" title="ดาวน์โหลดประวัติทั้งหมดเป็น CSV เปิดใน Excel ได้">⬇ ดาวน์โหลด CSV</a></h2>
+  <div class="row" id="fanStats"><span class="chip">—</span></div>
+  <canvas id="fanChart" width="900" height="110"></canvas>
+</div>
+
+<div class="panel">
+  <h2>เอนจินที่รันอยู่</h2>
+  <div class="row" id="engines"><span class="chip">—</span></div>
+  <div id="vizWrap" style="display:none; margin-top:10px">
+    <div class="k">ระดับเสียงสด (โซนซ้าย/กลาง/ขวา ตามที่เอนจินเพลงเห็น)</div>
+    <canvas id="musicViz" width="900" height="70"></canvas>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>เหตุการณ์ล่าสุด (จาก history.json)</h2>
+  <table id="events"><tr><th>เวลา</th><th>เหตุการณ์</th></tr></table>
+</div>
+
+<div class="panel" id="notifyPanel" style="display:none">
+  <h2>ตั้งค่าแจ้งเตือน (บันทึกสด — daemon ใช้ทันที)</h2>
+  <div class="row">
+    <label class="chip"><input type="checkbox" id="nEnabled"> เปิดแจ้งเตือน</label>
+    <label class="chip"><input type="checkbox" id="nEcFail"> EC ล่ม</label>
+    <label class="chip"><input type="checkbox" id="nEcRec"> EC กลับมา</label>
+    <label class="chip"><input type="checkbox" id="nFan"> พัดลมหยุดหมุน</label>
+    <select id="nThr" class="chip"><option>75</option><option>80</option><option>85</option><option selected>90</option><option>95</option><option>100</option></select>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <input class="chip" id="nDiscord" placeholder="Discord webhook URL" style="width:340px; background:transparent; color:var(--txt); border:1px solid var(--line)">
+  </div>
+  <div class="row" style="margin-top:8px">
+    <button class="chip" id="nSave">💾 บันทึกการแจ้งเตือน</button>
+    <button class="chip" id="nTest">🔔 ส่งข้อความทดสอบ</button>
+    <span class="k" id="nMsg"></span>
+  </div>
+</div>
+
+<div class="panel" id="remotePanel" style="display:none">
+  <h2>รีโมตควบคุม (สั่งผ่าน daemon — ต้องเปิด allow_control ใน GUI)</h2>
+  <div class="row" id="remoteRow">
+    <button class="chip" id="rPowOn">⏻ เปิดไฟ</button>
+    <button class="chip" id="rPowOff">⏻ ปิดไฟ</button>
+    <button class="chip" data-bright="0">สว่าง 0</button>
+    <button class="chip" data-bright="1">สว่าง 1</button>
+    <button class="chip" data-bright="2">สว่าง 2</button>
+    <button class="chip" data-bright="3">สว่าง 3</button>
+    <button class="chip" id="eng_music">▶ music</button>
+    <button class="chip" id="eng_ambient">▶ ambient</button>
+    <button class="chip" id="eng_temp">▶ temp</button>
+    <span id="profBtns"></span>
+  </div>
+  <div class="k" id="remoteMsg" style="margin-top:6px"></div>
+</div>
+
+<div class="panel">
+  <h2>เหตุการณ์ทั้งหมด (events.jsonl) <a class="chip" id="evDl" href="/api/events.jsonl" download="events.jsonl">⬇ ดาวน์โหลด</a></h2>
+  <div class="row" style="margin-bottom:8px">
+    <select id="evKind" class="chip">
+      <option value="">ทุกชนิด</option><option value="start">start</option>
+      <option value="setting">setting</option><option value="engine">engine</option>
+      <option value="notify">notify</option><option value="update">update</option>
+    </select>
+    <input class="chip" id="evQ" placeholder="ค้นหา..." style="width:200px; background:transparent; color:var(--txt); border:1px solid var(--line)">
+  </div>
+  <table id="events2"><tr><th>เวลา</th><th>ชนิด</th><th>รายละเอียด</th></tr></table>
+</div>
+
+<div class="panel">
+  <h2>สุขภาพเครื่อง (30 วันล่าสุด)</h2>
+  <div class="row" id="healthRow"><span class="chip">—</span></div>
+</div>
+
+<div class="panel">
+  <h2>สรุปรายสัปดาห์ (จากสถิติรายวัน)</h2>
+  <div class="row" id="weekStats"><span class="chip">—</span></div>
+  <table id="weekTable"><tr><th>สัปดาห์</th><th>วัน</th><th>พีคอุณหภูมิ</th><th>พีค RPM</th><th>EC fail</th><th>วันที่ร้อนสุด</th></tr></table>
+</div>
+
+<div class="panel">
+  <h2>สรุปรายวัน (30 วันล่าสุด — จาก daily_stats.json)</h2>
+  <canvas id="dailyChart" width="900" height="120"></canvas>
+  <div class="row" id="dailyStats"><span class="chip">—</span></div>
+  <table id="dailyTable"><tr><th>วันที่</th><th>อุณหภูมิเฉลี่ย/สูงสุด</th><th>RPM เฉลี่ย/สูงสุด</th><th>EC fail</th></tr></table>
+</div>
+
+<footer>ClevoBacklight daemon · หน้านี้อ่านจาก localhost เท่านั้น (127.0.0.1) — ไม่มีข้อมูลออกนอกเครื่อง</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function fmtUptime(s){
+  s = +s || 0; const d = Math.floor(s/86400), h = Math.floor(s%86400/3600), m = Math.floor(s%3600/60);
+  return (d ? d + ' วิ ' : '') + h + ':' + String(m).padStart(2,'0');
+}
+function drawTemp(hist){
+  const pts = hist.filter(p => p.ec_ok && typeof p.cpu_temp === 'number');
+  const cv = $('tempChart'), ctx = cv.getContext('2d');
+  const W = cv.width = cv.clientWidth || 900, H = cv.height = 110;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle = '#2d3644';
+  [0.25,0.5,0.75].forEach(f => { ctx.beginPath(); ctx.moveTo(0,H*f); ctx.lineTo(W,H*f); ctx.stroke(); });
+  if (pts.length < 2){
+    ctx.fillStyle = '#8b98a9'; ctx.font = '12px Segoe UI';
+    ctx.fillText('ยังไม่มีข้อมูลเพียงพอ (daemon เก็บจุดทุก 60 วิ)', 10, H/2);
+    return;
+  }
+  const lo = 30, hi = Math.max(95, Math.max(...pts.map(p => p.cpu_temp)) + 5);
+  const X = i => i/(pts.length-1)*(W-10)+5;
+  const Y = t => H-8 - (t-lo)/(hi-lo)*(H-20);
+  // red zone >= threshold 90
+  ctx.fillStyle = 'rgba(255,59,48,.07)';
+  ctx.fillRect(0, Y(90), W, Y(30)-Y(90));
+  ctx.beginPath();
+  pts.forEach((p,i) => i ? ctx.lineTo(X(i), Y(p.cpu_temp)) : ctx.moveTo(X(i), Y(p.cpu_temp)));
+  const grad = ctx.createLinearGradient(0,0,W,0);
+  grad.addColorStop(0,'#30b0c7'); grad.addColorStop(.6,'#34c759'); grad.addColorStop(1,'#ff3b30');
+  ctx.strokeStyle = grad; ctx.lineWidth = 2; ctx.stroke();
+  const last = pts[pts.length-1];
+  ctx.fillStyle = last.cpu_temp >= 90 ? '#ff3b30' : last.cpu_temp >= 75 ? '#ff9500' : '#00ff88';
+  ctx.beginPath(); ctx.arc(X(pts.length-1), Y(last.cpu_temp), 4, 0, 7); ctx.fill();
+}
+function drawFan(hist){
+  const pts = hist.filter(p => p.ec_ok && p.fan && typeof p.fan.cpu_rpm === 'number');
+  const cv = $('fanChart'), ctx = cv.getContext('2d');
+  const W = cv.width = cv.clientWidth || 900, H = cv.height = 110;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle = '#2d3644';
+  [0.25,0.5,0.75].forEach(f => { ctx.beginPath(); ctx.moveTo(0,H*f); ctx.lineTo(W,H*f); ctx.stroke(); });
+  if (pts.length < 2){
+    ctx.fillStyle = '#8b98a9'; ctx.font = '12px Segoe UI';
+    ctx.fillText('ยังไม่มีข้อมูลพัดลมเพียงพอ (เก็บตั้งแต่ daemon เวอร์ชัน 1.9.2+)', 10, H/2);
+    return;
+  }
+  const hi = Math.max(3000, Math.max(...pts.map(p => p.fan.cpu_rpm)) + 300);
+  const X = i => i/(pts.length-1)*(W-10)+5;
+  const Y = r => H-8 - r/hi*(H-20);
+  // stall zone (RPM near 0) tinted red
+  ctx.fillStyle = 'rgba(255,59,48,.10)';
+  ctx.fillRect(0, Y(200), W, H-8-Y(200));
+  ctx.beginPath();
+  pts.forEach((p,i) => i ? ctx.lineTo(X(i), Y(p.fan.cpu_rpm)) : ctx.moveTo(X(i), Y(p.fan.cpu_rpm)));
+  ctx.strokeStyle = '#30b0c7'; ctx.lineWidth = 2; ctx.stroke();
+  const last = pts[pts.length-1];
+  ctx.fillStyle = last.fan.cpu_rpm === 0 ? '#ff3b30' : '#30b0c7';
+  ctx.beginPath(); ctx.arc(X(pts.length-1), Y(last.fan.cpu_rpm), 4, 0, 7); ctx.fill();
+  ctx.fillStyle = '#8b98a9'; ctx.font = '11px Segoe UI';
+  ctx.fillText(hi + ' RPM', 6, 12); ctx.fillText('0', 6, H-4);
+}
+function fanStats(hist){
+  const pts = hist.filter(p => p.ec_ok && p.fan && typeof p.fan.cpu_rpm === 'number');
+  if (!pts.length) return null;
+  const v = pts.map(p => p.fan.cpu_rpm);
+  const avg = v.reduce((a,b) => a+b, 0) / v.length;
+  return {last: v[v.length-1], min: Math.min(...v), max: Math.max(...v), avg: Math.round(avg)};
+}
+function render(d){
+  $('ver').textContent = d.version || '?';
+  const ecEl = $('ec');
+  if (d.ec_ok){ ecEl.textContent = 'EC OK'; ecEl.className = 'v ok'; }
+  else { ecEl.textContent = 'EC FAILED'; ecEl.className = 'v bad'; }
+  const t = $('temp');
+  if (typeof d.cpu_temp === 'number'){
+    t.textContent = d.cpu_temp + '°C';
+    t.className = 'v ' + (d.cpu_temp >= 90 ? 'bad' : d.cpu_temp >= 75 ? 'warn' : 'ok');
+  } else { t.textContent = '—'; t.className = 'v bad'; }
+  const fEl = $('fan'), fdEl = $('fanduty');
+  if (d.fan && typeof d.fan.cpu_rpm === 'number' && d.fan.cpu_rpm > 0){
+    fEl.textContent = d.fan.cpu_rpm + ' RPM';
+    fEl.className = 'v ok';
+    fdEl.textContent = 'duty ' + d.fan.cpu_duty_pct + '%'
+      + (d.fan.gpu_rpm ? ' · GPU ' + d.fan.gpu_rpm + ' RPM' : '');
+  } else if (d.fan_error){
+    fEl.textContent = 'อ่านไม่ได้'; fEl.className = 'v warn';
+    fdEl.textContent = '';
+  } else { fEl.textContent = '—'; fEl.className = 'v bad'; fdEl.textContent = ''; }
+  $('power').textContent = d.power ? 'เปิด' : 'ปิด';
+  $('power').className = 'v ' + (d.power ? 'ok' : 'warn');
+  drawFan(d.history || []);
+  const fs = fanStats(d.history || []), stEl = $('fanStats');
+  if (fs){
+    stEl.innerHTML =
+      '<span class="chip on">ตอนนี้ <b>' + fs.last + '</b> RPM</span>' +
+      '<span class="chip">ต่ำสุด ' + fs.min + '</span>' +
+      '<span class="chip">สูงสุด ' + fs.max + '</span>' +
+      '<span class="chip">เฉลี่ย ' + fs.avg + '</span>' +
+      (fs.last === 0 ? '<span class="chip bad">⚠ พัดลมหยุดหมุน</span>' : '');
+  } else stEl.innerHTML = '<span class="chip">ยังไม่มีข้อมูลพัดลม</span>';
+  $('uptime').textContent = fmtUptime(d.uptime_s);
+  showRemote(d);
+  drawViz(d);
+  const eng = (d.engines && d.engines.length) ? d.engines : [];
+  $('engines').innerHTML = eng.length
+    ? eng.map(e => '<span class="chip on">▶ ' + esc(e) + '</span>').join('')
+    : '<span class="chip">ไม่มีเอนจินทำงาน</span>';
+  const tb = $('events');
+  tb.innerHTML = '<tr><th>เวลา</th><th>เหตุการณ์</th></tr>';
+  const hist = (d.history || []).slice(-12).reverse();
+  hist.forEach(p => {
+    const tr = document.createElement('tr');
+    let ev;
+    if (!p.ec_ok) ev = '<span class="bad">EC อ่านไม่ได้: ' + esc(p.error || '') + '</span>';
+    else {
+      ev = 'อุณหภูมิ <b>' + p.cpu_temp + '°C</b>';
+      if (p.fan && p.fan.cpu_rpm) ev += ' · พัดลม <b>' + p.fan.cpu_rpm + '</b> RPM';
+      if (p.engines && p.engines.length) ev += ' · ' + esc(p.engines.join(', '));
+    }
+    tr.innerHTML = '<td class="mono">' + esc(p.time || '?') + '</td><td>' + ev + '</td>';
+    tb.appendChild(tr);
+  });
+  drawTemp(d.history || []);
+}
+async function tick(){
+  try{
+    // keep any ?token= from the opening URL on every API call
+    const r = await fetch('/api/status' + location.search, {cache:'no-store'});
+    if (r.status === 401){
+      $('ec').textContent = 'ต้องใช้ token'; $('ec').className = 'v bad';
+      return;
+    }
+    render(await r.json());
+  }catch(e){
+    $('ec').textContent = 'offline'; $('ec').className = 'v bad';
+  }
+}
+tick(); setInterval(tick, 5000);
+
+function drawDaily(days){
+  const cv = $('dailyChart'), ctx = cv.getContext('2d');
+  const W = cv.width = cv.clientWidth || 900, H = cv.height = 120;
+  ctx.clearRect(0,0,W,H);
+  if (!days || !days.length){
+    ctx.fillStyle = '#8b98a9'; ctx.font = '12px Segoe UI';
+    ctx.fillText('ยังไม่มีสถิติรายวัน (เก็บตั้งแต่ daemon เวอร์ชัน 1.9.4 — วันละ 1 แถบ)', 10, H/2);
+    return;
+  }
+  const lo = 30, hi = Math.max(95, Math.max(...days.map(d => d.temp_max || 0)) + 5);
+  const bw = Math.max(6, (W-20)/Math.max(days.length, 30) - 3);
+  days.forEach((d, i) => {
+    const x = 10 + i*((W-20)/Math.max(days.length, 30));
+    const tmax = d.temp_max, tavg = d.temp_avg;
+    if (tmax != null){
+      const color = tmax >= 90 ? '#ff3b30' : tmax >= 75 ? '#ff9500' : '#34c759';
+      ctx.fillStyle = color;
+      const hMax = (tmax-lo)/(hi-lo)*(H-24);
+      ctx.fillRect(x, H-8-hMax, bw, hMax);
+      if (tavg != null){
+        ctx.fillStyle = 'rgba(255,255,255,.45)';
+        const hAvg = (tavg-lo)/(hi-lo)*(H-24);
+        ctx.fillRect(x, H-8-hAvg, bw, hAvg);
+      }
+    } else {
+      ctx.fillStyle = 'rgba(255,59,48,.5)';
+      ctx.fillRect(x, H-8-3, bw, 3);
+    }
+  });
+  ctx.fillStyle = '#8b98a9'; ctx.font = '11px Segoe UI';
+  ctx.fillText(hi + '°C', 6, 12); ctx.fillText(lo + '°C', 6, H-4);
+}
+async function loadNotifyCfg(){
+  try{
+    const r = await fetch('/api/notify-config' + location.search, {cache:'no-store'});
+    if (!r.ok){ $('notifyPanel').style.display = 'none'; return; }
+    const n = await r.json();
+    $('notifyPanel').style.display = '';
+    $('nEnabled').checked = n.enabled; $('nEcFail').checked = n.on_ec_fail;
+    $('nEcRec').checked = n.on_ec_recover; $('nFan').checked = n.on_fan_stall;
+    $('nThr').value = String(n.temp_threshold || 90);
+    $('nDiscord').value = n.discord_webhook || '';
+    if (n.telegram_configured) $('nMsg').textContent = '(Telegram: เชื่อมต่ออยู่)';
+  }catch(e){}
+}
+function saveNotifyCfg(){
+  fetch('/api/notify-config' + location.search, {method:'POST', cache:'no-store',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+      enabled: $('nEnabled').checked, on_ec_fail: $('nEcFail').checked,
+      on_ec_recover: $('nEcRec').checked, on_fan_stall: $('nFan').checked,
+      temp_threshold: +$('nThr').value, discord_webhook: $('nDiscord').value.trim()
+    })}).then(r => {
+      $('nMsg').textContent = r.ok ? 'บันทึกแล้ว ✓' : 'บันทึกไม่สำเร็จ (' + r.status + ')';
+    }).catch(e => $('nMsg').textContent = 'ส่งไม่ได้: ' + e);
+}
+function testNotify(){
+  fetch('/api/notify-test' + location.search, {method:'POST', cache:'no-store',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({})}).then(r => {
+      $('nMsg').textContent = r.ok ? 'ส่งแล้ว — ตรวจ toast/Discord/Telegram ✓' : 'ส่งไม่สำเร็จ (' + r.status + ')';
+    }).catch(e => $('nMsg').textContent = 'ส่งไม่ได้: ' + e);
+}
+loadNotifyCfg();
+$('nSave').onclick = saveNotifyCfg; $('nTest').onclick = testNotify;
+
+function checkUpdate(){
+  fetch('/api/update' + location.search, {cache:'no-store'})
+    .then(r => r.ok ? r.json() : null)
+    .then(j => {
+      if (!j) return;
+      const el = $('updateChip');
+      if (j.update_available)
+        el.innerHTML = 'เวอร์ชันใหม่ <b>' + esc(j.latest) + '</b> มีให้อัปเดต';
+      else el.textContent = 'เวอร์ชันล่าสุดแล้ว (' + esc(j.current) + ')';
+    }).catch(() => {});
+}
+checkUpdate(); setInterval(checkUpdate, 3600000);
+
+let vizHistory = [];
+function drawViz(d){
+  const wrap = $('vizWrap');
+  if (!(d.engines || []).includes('music') || !d.music_levels){
+    wrap.style.display = 'none'; vizHistory = []; return;
+  }
+  wrap.style.display = '';
+  vizHistory.push(d.music_levels);
+  if (vizHistory.length > 60) vizHistory.shift();   // ~5 วิที่ 5 วิ refresh
+  const cv = $('musicViz'), ctx = cv.getContext('2d');
+  const W = cv.width = cv.clientWidth || 900, H = cv.height = 70;
+  ctx.clearRect(0,0,W,H);
+  const cols = ['#30b0c7', '#34c759', '#ff9500'];
+  const bw = Math.max(4, W/60 - 2);
+  vizHistory.forEach((lv, i) => {
+    const x = W - (vizHistory.length - i) * (bw + 2);
+    lv.forEach((v, z) => {
+      const h = Math.max(2, v * (H-8));
+      ctx.fillStyle = cols[z % 3];
+      ctx.globalAlpha = 0.35 + 0.65 * (i / vizHistory.length);
+      ctx.fillRect(x, H-4-h, bw, h);
+    });
+  });
+  ctx.globalAlpha = 1;
+}
+function showRemote(d){
+  const panel = $('remotePanel');
+  if (!d.allow_control){ panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  const running = new Set(d.engines || []);
+  ['music','ambient','temp'].forEach(name => {
+    const b = $('eng_' + name);
+    if (!b) return;
+    b.textContent = (running.has(name) ? '■ หยุด ' : '▶ ') + name;
+    b.className = 'chip' + (running.has(name) ? ' on' : '');
+  });
+  if (!$('profBtns').dataset.built){
+    // profile buttons come from /api/status once (profiles map keys)
+    const holder = $('profBtns');
+    holder.dataset.built = '1';
+    (d.profiles && Object.keys(d.profiles) || []).forEach(name => {
+      const b = document.createElement('button');
+      b.className = 'chip'; b.textContent = 'โปรไฟล์: ' + name;
+      b.onclick = () => sendCmd({action:'profile', name});
+      holder.appendChild(b);
+    });
+  }
+}
+async function sendCmd(payload){
+  const msg = $('remoteMsg');
+  try{
+    const r = await fetch('/api/cmd' + location.search, {
+      method:'POST', cache:'no-store',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)});
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) msg.textContent = 'สำเร็จ: ' + payload.action;
+    else msg.textContent = 'ผิดพลาด (' + r.status + '): ' + (j.error || '?');
+  }catch(e){ msg.textContent = 'ส่งคำสั่งไม่ได้: ' + e; }
+}
+function bindRemote(){
+  $('rPowOn').onclick = () => sendCmd({action:'power', value:true});
+  $('rPowOff').onclick = () => sendCmd({action:'power', value:false});
+  document.querySelectorAll('[data-bright]').forEach(b => {
+    b.onclick = () => sendCmd({action:'brightness', value:+b.dataset.bright});
+  });
+  ['music','ambient','temp'].forEach(name => {
+    const b = $('eng_' + name);
+    if (b) b.onclick = () => sendCmd({action:'engine', name});
+  });
+}
+bindRemote();
+
+function showWeekly(){
+  fetch('/api/weekly' + location.search, {cache:'no-store'})
+    .then(r => r.ok ? r.json() : null)
+    .then(j => {
+      if (!j) return;
+      const weeks = j.summary || [], hh = j.hot_hour;
+      const st = $('weekStats');
+      st.innerHTML = (weeks.length
+        ? '<span class="chip">สัปดาห์นี้: ' + esc(weeks[weeks.length-1].week) + '</span>'
+          + '<span class="chip">พีค ' + (weeks[weeks.length-1].temp_peak ?? '—') + '°C</span>'
+        : '<span class="chip">ยังไม่มีข้อมูลรายสัปดาห์</span>')
+        + (hh && hh.hour
+          ? '<span class="chip on">ช่วงร้อนสุดที่เคยวัด: <b>' + hh.hour + '</b> (' + hh.temp + '°C)</span>' : '');
+      const tb = $('weekTable');
+      tb.innerHTML = '<tr><th>สัปดาห์</th><th>วัน</th><th>พีคอุณหภูมิ</th><th>พีค RPM</th><th>EC fail</th><th>วันที่ร้อนสุด</th></tr>';
+      weeks.slice().reverse().forEach(w => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td class="mono">' + esc(w.week) + '</td><td>' + w.days
+          + '</td><td>' + (w.temp_peak ?? '—') + '°</td><td>' + (w.rpm_peak ?? '—')
+          + '</td><td>' + (w.ec_fails || '0') + '</td><td class="mono">'
+          + esc(w.hottest_day || '—') + '</td>';
+        tb.appendChild(tr);
+      });
+    }).catch(() => {});
+}
+showWeekly(); setInterval(showWeekly, 600000);
+function showHealth(h){
+  const el = $('healthRow');
+  if (!h){ el.innerHTML = '<span class="chip">ยังไม่มีข้อมูลพอสำหรับเกรด</span>'; return; }
+  const color = h.grade === 'A' ? 'ok' : h.grade === 'B' ? 'ok'
+              : h.grade === 'C' ? 'warn' : 'bad';
+  el.innerHTML =
+    '<span class="chip ' + color + '" style="font-size:1.1rem">เกรด <b>' + h.grade
+    + '</b> (' + h.score + '/100)</span>'
+    + '<span class="chip">พีค 30 วัน: ' + (h.temp_peak ?? '—') + '°C</span>'
+    + '<span class="chip">EC fail: ' + (h.ec_fails || 0) + '</span>'
+    + (h.stall_days ? '<span class="chip bad">วันที่พัดลมนิ่ง: ' + h.stall_days + '</span>' : '');
+}
+async function loadEvents(){
+  try{
+    const r = await fetch('/api/events' + location.search, {cache:'no-store'});
+    if (!r.ok) return;
+    const evs = (await r.json()).events || [];
+    const kind = $('evKind').value, q = $('evQ').value.trim().toLowerCase();
+    const tb = $('events2');
+    tb.innerHTML = '<tr><th>เวลา</th><th>ชนิด</th><th>รายละเอียด</th></tr>';
+    evs.slice().reverse().forEach(e => {
+      if (kind && e.kind !== kind) return;
+      const det = JSON.stringify(e);
+      if (q && !det.toLowerCase().includes(q)) return;
+      const tr = document.createElement('tr');
+      const show = esc(det.length > 140 ? det.slice(0, 140) + '…' : det);
+      tr.innerHTML = '<td class="mono">' + esc(e.time || '?') + '</td><td>'
+        + '<span class="chip">' + esc(e.kind) + '</span></td><td class="mono">'
+        + show + '</td>';
+      tb.appendChild(tr);
+    });
+  }catch(e){}
+}
+$('evKind').onchange = loadEvents; $('evQ').oninput = loadEvents;
+loadEvents(); setInterval(loadEvents, 15000);
+
+async function loadDaily(){
+  try{
+    const r = await fetch('/api/daily' + location.search, {cache:'no-store'});
+    if (!r.ok) return;
+    const j = await r.json();
+    const days = j.days || [];
+    showHealth(j.health);
+    drawDaily(days);
+    const tb = $('dailyTable');
+    tb.innerHTML = '<tr><th>วันที่</th><th>อุณหภูมิเฉลี่ย/สูงสุด</th><th>RPM เฉลี่ย/สูงสุด</th><th>EC fail</th></tr>';
+    days.slice(-14).reverse().forEach(d => {
+      const tr = document.createElement('tr');
+      const temp = (d.temp_avg != null ? d.temp_avg + '°' : '—') + ' / '
+                 + (d.temp_max != null ? '<b>' + d.temp_max + '°</b>' : '—');
+      const rpm = (d.rpm_avg != null ? d.rpm_avg : '—') + ' / '
+                + (d.rpm_max != null ? '<b>' + d.rpm_max + '</b>' : '—');
+      tr.innerHTML = '<td class="mono">' + esc(d.date || '?') + '</td><td>' + temp
+                   + '</td><td>' + rpm + '</td><td>'
+                   + (d.ec_fails ? '<span class="bad">' + d.ec_fails + '</span>' : '0') + '</td>';
+      tb.appendChild(tr);
+    });
+    const st = $('dailyStats');
+    if (days.length){
+      const worst = Math.max(...days.map(d => d.temp_max || 0));
+      const fails = days.reduce((a,d) => a + (d.ec_fails||0), 0);
+      st.innerHTML = '<span class="chip">เก็บแล้ว ' + days.length + ' วัน</span>'
+                   + '<span class="chip">พีคสูงสุด <b>' + worst + '°C</b></span>'
+                   + (fails ? '<span class="chip bad">EC fail รวม ' + fails + ' ครั้ง</span>'
+                            : '<span class="chip on">ไม่มี EC fail เลย</span>');
+    }
+  }catch(e){ /* dashboard stays usable without the daily panel */ }
+}
+loadDaily(); setInterval(loadDaily, 300000);
+</script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Offline checks (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy mss pillow pystray soundcard comtypes pyinstaller
+
+      - name: Run all offline checks
+        shell: cmd
+        run: |
+          set "PY=python"
+          call test_all.bat
+
+      - name: Verify driver payload is embedded
+        shell: bash
+        run: |
+          test -f tools/WinRing0x64.sys || { echo "missing tools/WinRing0x64.sys"; exit 1; }
+          echo "driver payload OK"
+
+      - name: Smoke-build the exe
+        run: python -m PyInstaller --noconfirm --clean ClevoBacklight.spec
+
+      - name: Upload build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClevoBacklight-exe
+          path: dist/ClevoBacklight.exe
+
+  attach-release:
+    name: Attach zip to release
+    needs: test
+    if: github.event_name == 'release'
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy mss pillow pystray soundcard comtypes pyinstaller
+
+      - name: Run all offline checks
+        shell: cmd
+        run: |
+          set "PY=python"
+          call test_all.bat
+
+      - name: Build the exe
+        run: python -m PyInstaller --noconfirm --clean ClevoBacklight.spec
+
+      - name: Package release zip
+        shell: cmd
+        run: release.bat %VERSION%
+
+      - name: Attach zip to the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ClevoBacklight-v${{ github.event.release.tag_name }}.zip

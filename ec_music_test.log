@@ -1,0 +1,18 @@
+== Part A: music mode (tones out of the real speakers) ==
+  EC writes while silent-ish: 108 (rate ok)
+  playing 100 Hz sine for 3s ...
+  bands after 100Hz: BASS/MID/TRE = (0.14, 0.004, 0.001)
+  playing 3 kHz sine for 3s ...
+  bands after 3kHz: BASS/MID/TRE = (0.0, 0.0, 0.04)
+  music renderer stopped; total EC writes: 615
+  PASS  100 Hz -> BASS zone dominant (0.14, 0.004, 0.001)
+  PASS  3 kHz -> TREBLE zone dominant (0.0, 0.0, 0.04)
+  PASS  music wrote EC 507 times during tones
+== Part B: ambient mode (real screen grabs) ==
+  strips sampled: ((75, 99, 132), (75, 99, 131), (240, 240, 241))
+  EC writes during 6s ambient: >= 705 total
+  renderer alive while running: True, stopped: True
+  PASS  ambient ran and stopped cleanly
+  PASS  ambient wrote EC 705 times in 6s
+restored pre-test settings
+RESULT: PASS (0 warnings, 0 hard failures)

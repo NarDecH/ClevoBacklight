@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clevo Backlight — งานวิจัย &amp; การถอดรหัส (ฉบับเต็ม)</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#2d3644;
+    --txt:#dbe4f0; --mut:#8b98a9; --acc:#00ff88; --acc2:#30b0c7;
+    --warn:#ff9500; --bad:#ff3b30; --gold:#ffcc00;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{background:var(--bg); color:var(--txt); font-family:"Segoe UI",Tahoma,sans-serif; line-height:1.65; padding:0 0 60px}
+  .wrap{max-width:980px; margin:0 auto; padding:0 20px}
+  header{background:linear-gradient(135deg,#101725 0%,#0d1117 60%,#0a1a12 100%); border-bottom:1px solid var(--line); padding:42px 0 30px; margin-bottom:28px}
+  header h1{font-size:1.7rem; letter-spacing:.01em}
+  header h1 b{color:var(--acc)}
+  header .tag{color:var(--mut); margin-top:6px; font-size:.92rem}
+  .badges{margin-top:14px; display:flex; gap:8px; flex-wrap:wrap}
+  .badge{font-size:.72rem; border:1px solid var(--line); background:var(--panel); border-radius:20px; padding:3px 12px; color:var(--mut)}
+  .badge.g{border-color:var(--acc); color:var(--acc)}
+  .badge.b{border-color:var(--acc2); color:var(--acc2)}
+  nav{position:sticky; top:0; background:rgba(13,17,23,.94); backdrop-filter:blur(6px); border-bottom:1px solid var(--line); z-index:5; padding:10px 0; margin-bottom:26px}
+  nav .wrap{display:flex; gap:14px; flex-wrap:wrap; font-size:.8rem}
+  nav a{color:var(--acc2); text-decoration:none}
+  nav a:hover{text-decoration:underline}
+  section{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:22px 24px; margin-bottom:20px}
+  h2{font-size:1.12rem; margin-bottom:12px; color:var(--acc); display:flex; align-items:center; gap:8px}
+  h2 .no{background:var(--panel2); border:1px solid var(--line); border-radius:8px; font-size:.75rem; padding:2px 9px; color:var(--mut)}
+  h3{font-size:.95rem; margin:16px 0 8px; color:var(--acc2)}
+  p{margin:8px 0; color:var(--txt)}
+  .muted{color:var(--mut); font-size:.85rem}
+  table{width:100%; border-collapse:collapse; margin:10px 0; font-size:.85rem}
+  th,td{padding:7px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top}
+  th{color:var(--mut); font-weight:600; font-size:.75rem; text-transform:uppercase; letter-spacing:.05em}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  code{font-family:Consolas,monospace; background:var(--panel2); border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-size:.82em}
+  pre{background:#0a0e14; border:1px solid var(--line); border-radius:10px; padding:14px 16px; overflow-x:auto; font-size:.8rem; line-height:1.5; margin:10px 0}
+  pre code{background:none; border:none; padding:0}
+  .ok{color:var(--acc)} .bad{color:var(--bad)} .warn{color:var(--warn)} .gold{color:var(--gold)}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:12px; margin:12px 0}
+  .mini{background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:12px 14px}
+  .mini b{color:var(--acc2)}
+  .flow{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0}
+  .flow .step{background:var(--panel2); border:1px solid var(--acc2); color:var(--acc2); border-radius:8px; padding:6px 12px; font-size:.8rem}
+  .flow .arr{color:var(--mut)}
+  blockquote{border-left:3px solid var(--acc); background:rgba(0,255,136,.05); padding:10px 16px; border-radius:0 8px 8px 0; margin:12px 0; font-size:.9rem}
+  footer{color:var(--mut); font-size:.75rem; text-align:center; margin-top:30px}
+</style>
+</head>
+<body>
+
+<header><div class="wrap">
+  <h1>Clevo Backlight Controller — <b>งานวิจัย &amp; การถอดรหัส</b></h1>
+  <div class="tag">Reverse-engineering EC mailbox ของ Clevo N957TP6 (dsanke BIOS) บน Windows 11 — ตั้งแต่ช่องทางที่ตัน จนถึงโปรโตคอลที่ยืนยันบนฮาร์ดแวร์</div>
+  <div class="badges">
+    <span class="badge g">✅ ใช้งานจริงบนเครื่อง</span>
+    <span class="badge b">ถอดจาก DSDT ของเครื่องเอง</span>
+    <span class="badge">v1.9.0</span>
+    <span class="badge">2026-09-17</span>
+  </div>
+</div></header>
+
+<nav><div class="wrap">
+  <a href="#s1">1 เครื่องวิจัย</a>
+  <a href="#s2">2 ช่องทางที่ตัน</a>
+  <a href="#s3">3 ถอด DSDT</a>
+  <a href="#s4">4 ชั้น EC</a>
+  <a href="#s5">5 เซ็นเซอร์</a>
+  <a href="#s6">6 สถาปัตยกรรม</a>
+  <a href="#s7">7 ฟีเจอร์</a>
+  <a href="#s8">8 บั๊ก/บทเรียน</a>
+  <a href="#s9">9 งานต่อยอด</a>
+</div></nav>
+
+<div class="wrap">
+
+<section id="s1">
+  <h2><span class="no">1</span> เครื่องที่ใช้วิจัย</h2>
+  <table>
+    <tr><th>รายการ</th><th>ค่าที่ตรวจพบ (จาก DMI/SMBIOS จริง)</th></tr>
+    <tr><td>รุ่น / Product code</td><td><b>Clevo N957TP / N957TP6</b></td></tr>
+    <tr><td>CPU / เมนบอร์ด</td><td>Intel i9-9900K (desktop CPU) + Z390 — กลุ่ม barebone desktop-CPU จีน</td></tr>
+    <tr><td>BIOS</td><td>ดัดแปลงโดย <b>dsanke</b> (สตริง "Modified by dsanke" + Clevo subsystem ID)</td></tr>
+    <tr><td>OS</td><td>Windows 11 (build 26200)</td></tr>
+    <tr><td>คีย์บอร์ด</td><td>PS/2 — backlight <b>3 โซน</b> คุมผ่าน EC</td></tr>
+  </table>
+</section>
+
+<section id="s2">
+  <h2><span class="no">2</span> ช่องทางควบคุมที่ตรวจแล้ว "ใช้ไม่ได้"</h2>
+  <table>
+    <tr><th>ช่องทาง</th><th>ผล</th><th>เหตุผล</th></tr>
+    <tr><td>WMI Clevo <code>ABBC0F6D-…</code></td><td class="bad">❌</td><td>ไม่ถูกลงทะเบียนใน <code>root\WMI</code> — BIOS นี้ไม่มี MOF</td></tr>
+    <tr><td>Control Center 3.0 (Store)</td><td class="bad">❌</td><td>ต้องการไดรเวอร์ DCHU ของ Clevo ที่ไม่มีบน build นี้</td></tr>
+    <tr><td><code>\\.\ACPI</code> + <code>WMIB</code></td><td class="bad">❌</td><td>symlink หายบน Windows build นี้</td></tr>
+    <tr><td><code>GetSystemFirmwareTable</code></td><td class="bad">❌</td><td>ถูกปิดบนเครื่อง (ครบเฉพาะตอน elevated)</td></tr>
+    <tr><td>ALSysIO64.sys (Core Temp)</td><td class="warn">เลี่ยง</td><td>ติด flag vulnerable driver</td></tr>
+    <tr><td>USB HID backlight</td><td class="bad">❌</td><td>คีย์บอร์ดเป็น PS/2 ล้วน</td></tr>
+  </table>
+  <blockquote>สรุป: เหลือทางเดียว — <b>เขียนสั่ง EC ตรงผ่านไดรเวอร์ port-I/O</b> และต้องหา "ภาษา" ของ EC ให้เจอเอง</blockquote>
+</section>
+
+<section id="s3">
+  <h2><span class="no">3</span> จุดเปลี่ยน: ถอดรหัสจาก DSDT ของเครื่องเอง</h2>
+  <p>ดึง ACPI tables จาก registry (<code>HKLM\HARDWARE\ACPI</code>) → แปลงด้วย <b>iasl</b> (ACPICA ใน <code>tools/</code>) → ค้น DSDT 4,000+ บรรทัด:</p>
+  <div class="flow">
+    <span class="step">DSDT case 0x67 (~บรรทัด 24685)</span><span class="arr">→</span>
+    <span class="step">OperationRegion EC81 (~27721)</span><span class="arr">→</span>
+    <span class="step">mailbox EC RAM 0xF8–0xFC</span>
+  </div>
+  <h3>คำสั่งที่ถอดได้ (WMBB(0, 0x67, ARGS) → Local7 = ARGS&gt;&gt;0x1C &amp; 0xF)</h3>
+  <table>
+    <tr><th>ARGS</th><th>สิ่งที่ EC ทำ</th></tr>
+    <tr><td><code>0x0</code></td><td>สีเก่า 9-บิต: <code>FDAT=(g|r<<3|b<<6)&0xFF</code>, <code>FBUF=bit8</code>, <code>FCMD=0xC2</code></td></tr>
+    <tr><td><code>0x1/0x2</code></td><td>ไบต์เดี่ยว → reg <code>0x03/0x04</code> (breathe = <code>0x2A</code>)</td></tr>
+    <tr><td><code>0x3</code></td><td>cycle ทุกโซน: <code>FDAT=0x06, FBUF=0x01, FBF1=0x03</code></td></tr>
+    <tr><td><code>0x7–0xB</code></td><td>เอฟเฟกต์: random/dance/tempo/flash/wave = flags <code>0x07–0x0B</code></td></tr>
+    <tr><td><code>0xD</code></td><td>ความเร็ว: <code>0xFF - speed*0x19</code> ที่ reg 0x02</td></tr>
+    <tr><td><code>0xE</code></td><td>ไฟ: reg 0x0C = <code class="ok">0x3F เปิด</code> / <code class="bad">0x20 ปิด</code></td></tr>
+    <tr><td><code>0xF</code></td><td>สีรายโซน reg 0x03–05 payload <b>B/R/G</b> · brightness reg 0x06 = <code>63/126/189/252</code> (FCMD 0xCA)</td></tr>
+  </table>
+  <div class="grid">
+    <div class="mini"><b>ข้อค้นพบสำคัญ</b><br><span class="muted">FDAT 0x02–0x0C เป็น register IDs ของ mailbox ไม่ใช่ address EC RAM (0x02–0x0C จริงเก็บ fan/thermal)</span></div>
+    <div class="mini"><b>พิสูจน์ mailbox มีชีวิต</b><br><span class="muted">FCMD เคลียร์กลับ 0x00 เองหลังทุกคำสั่ง = เฟิร์มแวร์ประมวลผลจริง + ยืนยันด้วยตา (แดง→เขียว→น้ำเงิน)</span></div>
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="no">4</span> ชั้นเข้าถึง EC — ความปลอดภัยและความทนทาน</h2>
+  <ul style="margin:8px 0 8px 20px; font-size:.9rem">
+    <li><b>WinRing0x64.sys</b> ลงนาม v1.2.0.5 — โหลด on-demand ผ่าน SCM (service <code>WinRing0_1_2_0</code>)</li>
+    <li>โปรโตคอล ITE ผ่านพอร์ต <code>0x66/0x62</code>: read 0x80 / write 0x81 + เช็ก IBF/OBF</li>
+    <li><b>Hardening:</b> cross-process mutex <code>Global\ClevoBacklightEC</code> · retry ×3 + backoff · drain OBF · single-instance daemon</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">5</span> เซ็นเซอร์อุณหภูมิ — ยืนยันข้ามแหล่ง</h2>
+  <table>
+    <tr><th>EC RAM</th><th>ความหมาย</th><th>การยืนยัน</th></tr>
+    <tr><td><code>0x07</code></td><td><b>CPU temp (°C)</b></td><td class="ok">45 == 45.1°C จาก MSAcpi_ThermalZoneTemperature เป๊ะ</td></tr>
+    <tr><td><code>0xC7</code></td><td><b>GPU temp (°C)</b></td><td>field <code>VGAT</code> ในบล็อก mirror ของ DSDT — <span class="warn">แก้จากข้อสรุปเดิม 0x08 (ซึ่งคือ AC1 trip point ที่ ACPI เขียนลงไป ไม่ใช่ temp สด)</span></td></tr>
+  </table>
+  <h3>5.1 Fan registers (จากบล็อก mirror เดียวกัน — โหมด monitor ตั้งแต่ v1.9.1)</h3>
+  <table>
+    <tr><th>EC RAM</th><th>Field</th><th>ความหมาย</th></tr>
+    <tr><td><code>0x02</code></td><td><code>FAN0</code>(bit1) / <code>FAN1</code>(bit4)</td><td>บิตสถานะนโยบายพัดลม (อ่านเชิงข้อมูล — ไม่ใช่สวิตช์ที่คุมพฤติกรรม EC ได้)</td></tr>
+    <tr><td><code>0xCE / 0xCF</code></td><td><code>DUT1 / DUT2</code></td><td>duty พัดลม CPU / GPU (0–255) — <span class="warn">เซลล์ telemetry ที่ EC เขียนเอง</span></td></tr>
+    <tr><td><code>0xD0 / 0xD2</code></td><td><code>RPM1 / RPM2</code> (16-bit)</td><td>ความเร็วพัดลม (endianness auto-detect)</td></tr>
+  </table>
+  <blockquote><b>Fan control: proven absent</b> (ทดลองบนเครื่องจริง, v1.9.1) — หลักฐาน 3 ชั้น:
+    <ol>
+      <li>เขียน DUT1=65% ครั้งเดียว → EC ดึงกลับเป็น ~30% ภายใน ~1 วินาที</li>
+      <li>ยิงซ้ำ 4 Hz (แบบ NBFC) → duty ค้าง 65% ใน RAM แต่ <b>RPM นิ่ง 1452 ตลอด</b> = EC ไม่เอาค่าไปขับ PWM</li>
+      <li>grep ทุก case ในตัวจัดการ mailbox ของ DSDT → ไม่มี write path ถึง DUT/RPM เลย (มีแค่ 0x67=คีย์บอร์ด, 0x27)</li>
+    </ol>
+    สรุป: <code>clevo_fan.py</code> เป็น monitor อ่านอย่างเดียว (status / watch + unit test การันตีไม่มีการเขียน EC) — โค้ด controller ถูกลบ กู้ได้จาก git history ถ้าพอร์ตไปรุ่นที่คุมได้
+  </blockquote>
+  <p class="muted">กลายเป็นโหมด temp-reactive (ไล่สี cyan→เขียว→เหลือง→แดง + กระพริบเตือน ≥90°C) และ health check ของ daemon · เครื่องรุ่นอื่นใช้ <code>--dump-ec --diff</code> สำรวจ address เองได้ (hardware profile)</p>
+</section>
+
+<section id="s6">
+  <h2><span class="no">6</span> สถาปัตยกรรมซอฟต์แวร์</h2>
+  <pre><code>clevo_ec.py ──── EC/WinRing0 + mailbox protocol + CLI (--dump-ec, --temp…)
+   ├── engines: music (WASAPI loopback → FFT → 3 โซน)
+   │            ambient (mss → 3 แถบจอ → gamma/mix)
+   │            temp (EC 0x07 → gradient + alarm)
+   ├── config.py ── settings.json + validation ทุก section
+   ├── clevo_daemon.py ─ restore/hotkeys/tray/automation/health
+   │                      + dashboard(localhost:8787) + toast + watchdog
+   ├── GUI (tkinter) + launcher + PyInstaller onefile + Inno Setup
+   └── tests: offline mocks + AST audit + GUI smoke test 58 ขั้น</code></pre>
+  <div class="grid">
+    <div class="mini"><b>ทำไม EC ตรง</b><br><span class="muted">ช่องทางทางการใช้ไม่ได้ทั้งหมดบน BIOS นี้ (หัวข้อ 2)</span></div>
+    <div class="mini"><b>ทำไม daemon แยก</b><br><span class="muted">hotkeys/restore ต้องรันตลอดโดยไม่เปิด GUI</span></div>
+    <div class="mini"><b>ทำไม offline tests</b><br><span class="muted">EC ต้อง admin + แตะฮาร์ดแวร์ — mock ให้ทดสอบโปรโตคอลได้ทุกวัน</span></div>
+  </div>
+</section>
+
+<section id="s7">
+  <h2><span class="no">7</span> ฟีเจอร์ที่วิจัยแล้วทำจริง (ผ่านบนเครื่อง)</h2>
+  <table>
+    <tr><th>ฟีเจอร์</th><th>หลักการ</th><th>ผลพิสูจน์</th></tr>
+    <tr><td>🎵 Music reactive</td><td>WASAPI loopback → FFT → BASS/MID/TREBLE → 3 โซน (RMS per band, noise floor, beat)</td><td class="ok">100 Hz→BASS 0.14 (เทียบ 0.004) · 3 kHz→TREBLE · 507 EC writes</td></tr>
+    <tr><td>🖥️ Ambient</td><td>mss (DX Duplication) → 3 แถบ → gamma 1.6 → mix สีเดิม</td><td class="ok">705 writes/6 วิ · สีตรงจอรายแถบ</td></tr>
+    <tr><td>🌡️ Temp reactive</td><td>EC 0x07 → gradient + alarm blink</td><td class="ok">อ่านจริง 44–51°C ตรง Windows</td></tr>
+    <tr><td>🎛️ Profiles/Automation</td><td>game auto-profile · schedule ข้ามเที่ยงคืน · battery-aware</td><td class="ok">smoke test 58 ขั้น PASS</td></tr>
+    <tr><td>🩺 Health/Dashboard</td><td>status.json + history.json + localhost:8787 + toast</td><td class="ok">/api/status ตอบจริง ec_ok:true</td></tr>
+  </table>
+</section>
+
+<section id="s8">
+  <h2><span class="no">8</span> บั๊กที่ค้นพบ → บทเรียนวิศวกรรม</h2>
+  <table>
+    <tr><th>บั๊ก</th><th>บทเรียน / การกันซ้ำ</th></tr>
+    <tr><td><code>CreateService failed: 6</code></td><td>ctypes ต้องประกาศ restype/argtypes ครบ (handle 64-บิตโดน truncation)</td></tr>
+    <tr><td>GUI <code>_set_status</code> หาย (AttributeError ตอนรัน)</td><td>สร้าง <b>AST auditor</b> จับ <code>self.x</code> ที่ไม่มีนิยามทั้งโปรเจกต์ — รันใน test_all ทุกครั้ง</td></tr>
+    <tr><td><code>self._stop</code> ทับ <code>Thread._stop()</code> → join() พัง</td><td>ใช้ <code>_stop_ev</code> + auditor ห้ามชื่อนี้ตลอดไป</td></tr>
+    <tr><td><code>CreateWindowExW failed</code> (monitor ตายมาตั้ง v1.1)</td><td>hInstance ต้อง set + HWND ต้องมี prototype (64-bit)</td></tr>
+    <tr><td>wrapper stdout ปิด buffer ร่วมกัน (pythonw)</td><td>ใช้ <code>sys.stdout.detach()</code> ก่อน re-wrap</td></tr>
+    <tr><td><code>engine_start</code> ใช้ kb ก่อน connect</td><td>unit test จับได้ก่อนขึ้นเครื่องจริง — เพิ่มชุด mixin tests</td></tr>
+  </table>
+</section>
+
+<section id="s9">
+  <h2><span class="no">9</span> ช่องทางที่ยังเปิดสำหรับงานต่อ</h2>
+  <ul style="margin:8px 0 8px 20px; font-size:.9rem">
+    <li>เพิ่ม <b>hardware profiles</b> รุ่นอื่นใน <code>clevo_temp.HW_DEFAULTS</code> — สำรวจด้วย <code>--dump-ec --label idle</code> → โหลดหนัก → <code>--diff</code></li>
+    <li>อ่านค่ากลับจาก mailbox: pattern <code>FCMD=0xB8</code> (DSDT บรรทัด 23535/24376)</li>
+    <li><span class="warn">❌ fan control — พิสูจน์แล้วว่าทำไม่ได้บนเฟิร์มแวร์นี้</span> (v1.9.1 เปลี่ยนเป็น monitor อ่านอย่างเดียว — หลักฐานในหัวข้อ 5.1) · <code>ec_sensor_finder.py</code> หาเซ็นเซอร์เครื่องใหม่อัตโนมัติยังใช้ได้</li>
+    <li>เชื่อม dashboard กับมือถือผ่าน LAN (ปัจจุบันจำกัด 127.0.0.1 โดย design)</li>
+  </ul>
+</section>
+
+<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · 2026-09-17</footer>
+</div>
+</body>
+</html>
