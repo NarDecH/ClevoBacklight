@@ -75,6 +75,7 @@
   <a href="#s11">11 PWA/offline</a>
   <a href="#s13">13 Win32 access mask</a>
   <a href="#s14">14 observability</a>
+  <a href="#s15">15 usage+DIY API</a>
 </div></nav>
 
 <div class="wrap">
@@ -299,7 +300,19 @@
   <p><b>บั๊กที่ test จับระหว่างทำ:</b> <code>self._load_info = ""</code> ถูกวาง<b>หลัง</b> <code>self._load()</code> ใน <code>__init__</code> — เหตุผลที่ loader record ไว้ถูกทับด้วยค่าว่างเสมอ (ลำดับ state ก่อน loader คือจุดเสี่ยงที่ควรจับตา)</p>
 </section>
 
-<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.20) · ความปลอดภัย: SECURITY.md</footer>
+<section id="s15">
+  <h2><span class="no">15</span> Observability รอบสอง — usage stats, DIY API, quick actions (v1.9.21)</h2>
+  <table>
+    <tr><th>ฟีเจอร์</th><th>การตัดสินใจ</th><th>เหตุผล</th></tr>
+    <tr><td>สถิติเกมต่อวัน</td><td>นับใน auto loop → หักบัญชีนาทีเข้า daily entry (usage)</td><td>ไม่เพิ่ม poll/thread · <b>usage ต้อง carry ผ่าน re-aggregation</b> (test จับ: roll รายวันทับ usage หาย)</td></tr>
+    <tr><td>DIY API</td><td>action <code>light</code> บน /api/cmd เดิม + restore ด้วย timer</td><td>ใช้ auth/gate/elog เดิมหมด · <b>ไม่บันทึก settings เด็ดขาด</b> · ตัด foreground-heuristic restore (ผู้เรียกคือ HA/สคริปต์ ไม่มีหน้าต่างให้เฝ้า)</td></tr>
+    <tr><td>Events viewer</td><td>อัปเกรดของเดิม: แยก auth_fail (chip แดง) + auto_profile</td><td>auth_fail เดินใต้ kind=notify มาตั้งแต่ v1.9.12 — กรองให้เห็นตรง ๆ</td></tr>
+    <tr><td>Quick Actions</td><td>พรีเซ็ตยิง action <code>light</code> เท่านั้น</td><td>ปุ่มด่วนที่เขียน config ได้ = ของอันตรายบนมือถือ — ยึดหลัก "ควบคุมชั่วคราว ไม่แก้ถาวร"</td></tr>
+  </table>
+  <p><b>บั๊กระหว่างทำ:</b> แทรก <code>HEX_RE</code> ทับท้าย CSV_HEADERS (IndentationError — compile gate จับ) · make_daemon ลืม <code>_game_*</code> attrs (บทเรียนซ้ำหัวข้อ 14) · usage โดน re-aggregate ทับ (test ออกแบบให้จับ)</p>
+</section>
+
+<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.21) · ความปลอดภัย: SECURITY.md</footer>
 </div>
 </body>
 </html>

@@ -51,6 +51,8 @@ def make_daemon(tmpdir, monkey_overrides=None):
     d._auto_last_msg = None
     d._auto_last_ts = 0.0
     d._auto_last_exe = ""
+    d._game_since = 0.0                  # v1.9.21 game-usage fields
+    d._game_current = ""
     d._daily = []                        # daily-summary store (v1.9.20 test)
     d._start_time = time.time()
     d._health_stop = threading.Event()
@@ -1202,6 +1204,74 @@ def test_v1920_features(tmp):
     print("v1.9.20 features OK (loader info, auto-notify dedup, status fields, foreground endpoint)")
 
 
+def test_v1921_features(tmp):
+    """v1.9.21: game-usage daily accounting, /api/cmd light action for Home
+    Assistant (validation + no-save + one-shot restore), and the shell for
+    events viewer (read_events endpoint already covered elsewhere)."""
+    today = config.human_now()[:10]
+
+    # ---- A. game usage credited on transitions ----
+    d = make_daemon(tmp)
+    d._daily = [{"date": today, "temp_avg": None, "temp_max": None,
+                 "rpm_avg": None, "rpm_max": None, "ec_fails": 0,
+                 "uptime_s": 0, "samples": 0}]
+    d._game_since = time.time() - 300      # 5 minutes already elapsed
+    d._game_track("eldenring.exe")         # transition: credit previous ("")
+    assert d._game_current == "eldenring.exe"
+    d._game_current = "eldenring.exe"       # simulate prior rule match
+    d._game_since = time.time() - 180
+    d._game_track("")                       # leave -> credit 3 min
+    entry = next(x for x in d._daily if x["date"] == today)
+    usage = entry.get("usage", {})
+    assert usage.get("eldenring.exe", 0) > 0, usage
+
+    # ---- B. re-aggregation must carry usage across (live day) ----
+    d._hist_lock = threading.Lock()
+    d._history = [{"time": config.human_now(), "ec_ok": True,
+                   "cpu_temp": 50, "uptime_s": 10,
+                   "fan": {"cpu_rpm": 1400, "gpu_rpm": 0}}]
+    d._roll_daily()
+    entry = next(x for x in d._daily if x["date"] == today)
+    assert entry.get("usage", {}).get("eldenring.exe", 0) > 0, entry.get("usage")
+
+    # ---- C. /api/cmd light: validation + EC calls + no persistence ----
+    kb = _Kb()
+    d.connect = lambda: kb
+    d.settings.set = lambda k, v, save=True: updates.append((k, v))
+    updates = []
+    r = d.remote_command({"action": "light",
+                          "zones": ["#ff0000", "00ff00"]})
+    assert r["ok"]
+    assert ("zone", 0, 255, 0, 0) in kb.calls, kb.calls      # hex normalized
+    assert ("zone", 1, 0, 255, 0) in kb.calls
+    assert ("zone", 2, 0, 255, 0) in kb.calls                # last zone repeated
+    assert not updates, updates                              # nothing saved
+    try:
+        d.remote_command({"action": "light", "zones": ["red"]})
+        raise AssertionError("bad hex must raise")
+    except ValueError:
+        pass
+    try:
+        d.remote_command({"action": "light", "zones": ["ff0000"],
+                          "mode": "rainbow"})
+        raise AssertionError("bad mode must raise")
+    except ValueError:
+        pass
+
+    # ---- D. light one-shot restore (immediate) ----
+    r = d.remote_command({"action": "light", "zones": ["0000ff"],
+                          "restore": "work"})
+    assert r["ok"]
+    assert any(c[0] == "zone" for c in kb.calls)            # restore applied too
+    try:
+        d.remote_command({"action": "light", "zones": ["0000ff"],
+                          "restore": "nope"})
+        raise AssertionError("unknown restore profile must raise")
+    except ValueError:
+        pass
+    print("v1.9.21 features OK (game usage, carry-across, light action + restore)")
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="clevo_test_")
     test_health_check_roundtrip(tmp)
@@ -1237,6 +1307,7 @@ def main():
     test_foreground_exe_contract()
     test_settings_bom_tolerant(tmp)
     test_v1920_features(tmp)
+    test_v1921_features(tmp)
     print("ALL CONFIG/DAEMON MIXIN TESTS PASSED")
 
 

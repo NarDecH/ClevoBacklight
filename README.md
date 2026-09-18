@@ -310,7 +310,26 @@ daemon รวม history เป็น**สถิติรายวัน** (`dai
 
 ## รีโมตจากมือถือ / หน้าเว็บ (opt-in)
 
-เปิด checkbox **"อนุญาตให้ควบคุมไฟจากหน้าเว็บ"** ในแผง Dashboard ของ GUI แล้วหน้าเว็บ (localhost หรือ LAN พร้อม token) จะมีปุ่ม: **power เปิด/ปิด · ความสว่าง 0–3 · โปรไฟล์ทุกตัว · โหมดเรียลไทม์ music/ambient/temp (▶/■)** — ส่งเป็น `POST /api/cmd` `{"action": "power|brightness|profile|engine", ...}` ผ่าน daemon (ปิดโดย default) · สั่ง EC เหมือนกด hotkey — **ไม่แก้ settings ที่เซฟไว้**
+เปิด checkbox **"อนุญาตให้ควบคุมไฟจากหน้าเว็บ"** ในแผง Dashboard ของ GUI แล้วหน้าเว็บ (localhost หรือ LAN พร้อม token) จะมีปุ่ม: **power เปิด/ปิด · ความสว่าง 0–3 · โปรไฟล์ทุกตัว · โหมดเรียลไทม์ music/ambient/temp (▶/■) · ⚡ Quick Actions (พรีเซ็ตกลางคืน/เกมมิ่ง/ทำงาน)** — ส่งเป็น `POST /api/cmd` `{"action": "power|brightness|profile|engine|light", ...}` ผ่าน daemon (ปิดโดย default) · สั่ง EC เหมือนกด hotkey — **ไม่แก้ settings ที่เซฟไว้**
+
+**สั่งจาก Home Assistant / สคริปต์ (v1.9.21)** — action `light`: สีต่อโซน 1–3 ช่อง (hex) + brightness + mode + speed โดยไม่บันทึกทับโปรไฟล์ และตั้ง `restore` ให้กลับโปรไฟล์เดิมเองหลัง N วินาที:
+
+```bash
+curl -X POST http://127.0.0.1:8787/api/cmd?token=TOKEN \
+  -H "Content-Type: application/json" \
+  -d '{"action":"light","zones":["ff0000","00ff00"],"brightness":2,
+       "mode":"breathe","speed":6,"restore":"work","restore_after":300}'
+```
+
+HA example (rest_command):
+
+```yaml
+rest_command:
+  kb_light:
+    url: http://PC-IP:8787/api/cmd?token=YOUR_TOKEN
+    method: POST
+    payload: '{"action":"light","zones":["{{ zones }}"],"brightness":{{ level }}}'
+```
 
 ## Discord webhook
 

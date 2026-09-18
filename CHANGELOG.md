@@ -2,6 +2,18 @@
 
 รูปแบบอ้างอิง [Keep a Changelog](https://keepachangelog.com/) — เวอร์ชันตามเสถียรภาพของฟีเจอร์ (ไม่มี release สาธารณะ ใช้ภายในเครื่อง)
 
+## [1.9.21] — 2026-09-18
+
+### Added
+- **สถิติการใช้เกมต่อวัน** — auto loop จดเวลาที่แต่ละ `.exe` (ที่มีกฎ) อยู่ฟื้กซ์ แล้วหักบัญชีเป็นนาทีเข้า daily entry ของวันนั้น (`usage = {exe: นาที}`) · ค่า usage **ไปรอดจากการ re-aggregate** รายวัน (เคสที่ test จับได้ — re-roll ต้อง carry usage เดิมกลับ) · ตาราง "สรุปรายวัน" บน Dashboard เพิ่มคอลัมน์ "เกม/แอปที่ใช้ (นาที)" แสดง top 3
+- **action `light` บน `/api/cmd` (DIY / Home Assistant / สคริปต์)** — `{"action":"light","zones":["ff0000","00ff00"],"brightness":0-3,"mode":"breathe|...","speed":0-9,"restore":"work","restore_after":วินาที}` · สีต่อโซน 1–3 ช่อง (โซนที่ไม่ระบุใช้สีสุดท้ายซ้ำ) · validate hex/mode/ค่าทั้งหมด → 400 · **ไม่บันทึกทับ settings ทุกกรณี** · `restore` ระบุโปรไฟล์ให้ re-apply หลัง `restore_after` วิ (timer, default 0 = ทันที) และ auto กลับมา re-engage · log ทุกการสั่งลง events (`setting`/`light`)
+- **Events viewer อัปเกรด** — filter "notify / auth_fail" แยกเหตุการณ์กันเดา token ออกเป็น chip สีแดง (auth_fail เดินอยู่ใต้ kind=notify ด้วย `nkind`) + ตัวเลือก `auto_profile` · รีเฟรชสดทุก 15 วิ (เดิมมีอยู่)
+- **⚡ Quick Actions bar** — แถบคำสั่งด่วนบน Dashboard (โชว์เมื่อ allow_control): พรีเซ็ต 🌙 กลางคืน / 🔥 เกมมิ่ง / 💼 ทำงาน / ปิด-เปิดไฟ แตะเดียวจบจากมือถือ — ทำงานผ่าน action `light` จึงไม่มีทางทับโปรไฟล์ที่ตั้งไว้
+
+### Tests
+- `test_v1921_features` — การหักบัญชี usage เมื่อสลับแอป, carry-across ผ่าน re-aggregation, light validation (hex ผิด/mode ผิด → ValueError), ครบทั้ง zone-color calls + ไม่ persist, restore ทันที + ปฏิเสธ restore profile ลอย ๆ
+- **`audit_locks.py` จับ deadlock ใหม่ได้ก่อน release** — restore แบบทันที (delay=0) เรียก `connect()` ขณะถือ `self.lock` = self-deadlock แบบเดียวกับ v1.9.13 · แก้โดยเลื่อน execution ไปท้าย `remote_command` หลังปล่อย lock (ทั้ง immediate และ timer path) — เครื่องมือกันซ้ำที่สร้างไว้ทำงานครบวงจรครั้งแรก
+
 ## [1.9.20] — 2026-09-18
 
 ### Added

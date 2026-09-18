@@ -130,13 +130,26 @@
   </div>
 </div>
 
+<div class="panel" id="qaPanel" style="display:none">
+  <h2>⚡ คำสั่งด่วน (แตะเดียวจบ)</h2>
+  <div class="row" style="flex-wrap:wrap; gap:8px" id="qaBar">
+    <button class="chip" data-qa-preset='{"action":"light","zones":["30B0C7"],"brightness":1}'>🌙 กลางคืน (ฟ้า นวล)</button>
+    <button class="chip" data-qa-preset='{"action":"light","zones":["FF3B30"],"brightness":3,"mode":"breathe","speed":6}'>🔥 เกมมิ่ง (แดง เต็ม)</button>
+    <button class="chip" data-qa-preset='{"action":"light","zones":["FFFFFF"],"brightness":2}'>💼 ทำงาน (ขาว)</button>
+    <button class="chip" data-qa-preset='{"action":"power","value":false}'>🌑 ปิดไฟ</button>
+    <button class="chip" data-qa-preset='{"action":"power","value":true}'>💡 เปิดไฟ</button>
+  </div>
+  <div class="k" style="margin-top:6px; color:var(--mut)">พรีเซ็ตสั่งผ่าน /api/cmd (action light) — ไม่บันทึกทับโปรไฟล์ของคุณ · สถานะกลับมาสดเองทุก 5 วิ</div>
+</div>
+
 <div class="panel">
   <h2>เหตุการณ์ทั้งหมด (events.jsonl) <a class="chip" id="evDl" href="/api/events.jsonl" download="events.jsonl">⬇ ดาวน์โหลด</a></h2>
   <div class="row" style="margin-bottom:8px">
     <select id="evKind" class="chip">
       <option value="">ทุกชนิด</option><option value="start">start</option>
       <option value="setting">setting</option><option value="engine">engine</option>
-      <option value="notify">notify</option><option value="update">update</option>
+      <option value="notify">notify / auth_fail</option><option value="update">update</option>
+      <option value="auto_profile">auto_profile</option>
     </select>
     <input class="chip" id="evQ" placeholder="ค้นหา..." style="width:200px; background:transparent; color:var(--txt); border:1px solid var(--line)">
   </div>
@@ -838,9 +851,15 @@ window.addEventListener('online', () => { offlineFlush(); tick(); });
 if (!navigator.onLine) offlineBadge();
 
 function showPower(d){
-  const panel = $('powerPanel');
-  if (!d.allow_control){ panel.style.display = 'none'; return; }
-  panel.style.display = '';
+  const panel = $('powerPanel'), qa = $('qaPanel');
+  if (!d.allow_control){ panel.style.display = 'none'; qa.style.display = 'none'; return; }
+  panel.style.display = ''; qa.style.display = '';
+  if (!qa.dataset.bound){
+    qa.dataset.bound = '1';
+    qa.querySelectorAll('[data-qa-preset]').forEach(b => {
+      b.onclick = () => sendCmd(JSON.parse(b.dataset.qaPreset));
+    });
+  }
   const on = !!d.power;
   const b = $('bigPower');
   b.textContent = on ? '💡 ไฟเปิดอยู่ — แตะเพื่อปิด' : '🌑 ไฟปิดอยู่ — แตะเพื่อเปิด';
@@ -922,14 +941,16 @@ async function loadEvents(){
     const tb = $('events2');
     tb.innerHTML = '<tr><th>เวลา</th><th>ชนิด</th><th>รายละเอียด</th></tr>';
     evs.slice().reverse().forEach(e => {
-      if (kind && e.kind !== kind) return;
+      // auth_fail rides kind=notify with nkind=auth_fail (v1.9.21)
+      const k = (e.nkind === 'auth_fail') ? 'auth_fail' : e.kind;
+      if (kind && k !== kind) return;
       const det = JSON.stringify(e);
       if (q && !det.toLowerCase().includes(q)) return;
       const tr = document.createElement('tr');
       const show = esc(det.length > 140 ? det.slice(0, 140) + '…' : det);
-      tr.innerHTML = '<td class="mono">' + esc(e.time || '?') + '</td><td>'
-        + '<span class="chip">' + esc(e.kind) + '</span></td><td class="mono">'
-        + show + '</td>';
+      const kchip = '<span class="chip' + (k === 'auth_fail' ? ' bad' : '') + '">' + esc(k) + '</span>';
+      tr.innerHTML = '<td class="mono">' + esc(e.time || '?') + '</td><td>' + kchip
+        + '</td><td class="mono">' + show + '</td>';
       tb.appendChild(tr);
     });
   }catch(e){}
@@ -946,16 +967,20 @@ async function loadDaily(){
     showHealth(j.health);
     drawDaily(days);
     const tb = $('dailyTable');
-    tb.innerHTML = '<tr><th>วันที่</th><th>อุณหภูมิเฉลี่ย/สูงสุด</th><th>RPM เฉลี่ย/สูงสุด</th><th>EC fail</th></tr>';
+    tb.innerHTML = '<tr><th>วันที่</th><th>อุณหภูมิเฉลี่ย/สูงสุด</th><th>RPM เฉลี่ย/สูงสุด</th><th>EC fail</th><th>เกม/แอปที่ใช้ (นาที)</th></tr>';
     days.slice(-14).reverse().forEach(d => {
       const tr = document.createElement('tr');
       const temp = (d.temp_avg != null ? d.temp_avg + '°' : '—') + ' / '
                  + (d.temp_max != null ? '<b>' + d.temp_max + '°</b>' : '—');
       const rpm = (d.rpm_avg != null ? d.rpm_avg : '—') + ' / '
                 + (d.rpm_max != null ? '<b>' + d.rpm_max + '</b>' : '—');
+      const usage = Object.entries(d.usage || {})
+        .sort((a,b) => b[1]-a[1]).slice(0,3)
+        .map(([exe, m]) => esc(exe) + ' <b>' + Math.round(m) + '</b>′').join(' · ');
       tr.innerHTML = '<td class="mono">' + esc(d.date || '?') + '</td><td>' + temp
                    + '</td><td>' + rpm + '</td><td>'
-                   + (d.ec_fails ? '<span class="bad">' + d.ec_fails + '</span>' : '0') + '</td>';
+                   + (d.ec_fails ? '<span class="bad">' + d.ec_fails + '</span>' : '0')
+                   + '</td><td>' + (usage || '<span style="color:var(--mut)">—</span>') + '</td>';
       tb.appendChild(tr);
     });
     const st = $('dailyStats');

@@ -223,5 +223,18 @@
 
 **บทเรียนซ้ำ:** make_daemon (test helper สร้าง daemon ด้วย `__new__`) ลืม attrs ใหม่ได้ทุกรอบที่เพิ่ม field — ทางแก้เชิงโครงสร้างคือให้ attrs เหล่านี้มีค่า default ที่ระดับ class หรือทำ test helper ให้ sync อัตโนมัติ (ยังไม่ทำ — ยอมรับความเสี่ยงเพราะ test ทันทีที่ลืม)
 
+## 15) Observability รอบสอง — usage stats, DIY API, quick actions (v1.9.21)
+
+**โจทย์ต่อจากหัวข้อ 14:** เห็นว่า "ตอนนี้กฎทำอะไร" แล้ว — รอบนี้ตอบ "ใช้เกมไหนนานแค่ไหน", "สั่งไฟเองจากของนอกระบบได้ไหม" และ "ปุ่มที่ใช้บ่อยอยู่ไหน"
+
+| ฟีเจอร์ | การตัดสินใจ | เหตุผล |
+|---|---|---|
+| สถิติเกมต่อวัน | นับใน auto loop (จุดเดียวที่มี foreground อยู่แล้ว) → หักบัญชีนาทีเข้า daily entry (`usage`) | ไม่เพิ่ม poll/thread ใหม่ · ตาราง daily มีอยู่ — เพิ่ม key และคอลัมน์ · **usage ต้อง carry ผ่าน re-aggregation** (ตอนแรกลืม — test จับ: roll รายวันทับ usage หาย) |
+| DIY API | action ใหม่ `light` บน `/api/cmd` เดิม — สี 1–3 โซน, mode, speed, brightness, restore ด้วย timer | ใช้ auth/gate/allow_control/elog ที่มีทั้งหมด — endpoint ใหม่ = พื้นผิวโจมตีใหม่โดยไม่จำเป็น · **ไม่บันทึก settings เด็ดขาด** (หลักการเดียวกับ preview) — restore เป็น timer ชัด ๆ ไม่ใช่เดาจาก foreground (รอบแรกพยายามใช้ foreground heuristic — ลบทิ้งเพราะผู้เรียกคือ HA/สคริปต์ ไม่มีหน้าต่างฟื้กซ์ให้เฝ้า) |
+| Events viewer | ไม่สร้าง panel ใหม่ — อัปเกรดของเดิม: แยก auth_fail ออกจาก notify + สีแดง + ตัวเลือก auto_profile | auth_fail เดินใต้ kind=notify (nkind) มาตั้งแต่ v1.9.12 — การกรองให้เห็นตรง ๆ ทำให้ "มีใครพยายามยิง" โดดออกมาทันที |
+| Quick Actions | แถบพรีเซ็ตบน Dashboard ที่ยิง action `light` เท่านั้น — ไม่มีทางเขียน settings | ปุ่มด่วนที่เขียน config ได้ = ของอันตรายบนมือถือ — ยึดหลัก "ควบคุมชั่วคราว ไม่แก้ถาวร" |
+
+**บั๊กที่เกิดระหว่างทำ (จับโดย compile/test):** ① แทรก `HEX_RE` ทับท้าย CSV_HEADERS ทำ list ขาดกลางคัน (IndentationError ทันที — compile gate ทำงาน) ② make_daemon ลืม `_game_*` attrs (AttributeError ใน test — บทเรียนซ้ำหัวข้อ 14: test helper กับ attrs ใหม่) ③ usage ถูก re-aggregate ทับ (test ออกแบบให้จับได้ตั้งแต่ต้น) ④ **`audit_locks.py` จับ restore ทันทีเรียก `connect()` ขณะถือ `self.lock`** — self-deadlock แบบเดียวกับ v1.9.13 ที่เกือบหลุดเข้า release ครั้งนี้ · แก้โดยเลื่อน execution ออกหลังปล่อย lock · **ครั้งแรกที่เครื่องมือกันซ้ำทำงานครบวงจร: จับ → แก้ → clean** พิสูจน์ว่า auditor คุ้มค่าที่สร้างไว้
+
 ---
-*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.20) · หน้าเว็บฉบับสวย: `docs/research.html` · ความปลอดภัย: `SECURITY.md`*
+*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.21) · หน้าเว็บฉบับสวย: `docs/research.html` · ความปลอดภัย: `SECURITY.md`*

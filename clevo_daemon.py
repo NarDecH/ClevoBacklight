@@ -27,6 +27,7 @@ import subprocess
 import sys
 import threading
 import time
+import re
 from ctypes import wintypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import urllib.request
@@ -111,6 +112,8 @@ EV_START, EV_SETTING, EV_ENGINE, EV_NOTIFY, EV_UPDATE, EV_AUTO = (
 CSV_HEADERS = ["time", "version", "ec_ok", "cpu_temp", "cpu_rpm", "gpu_rpm",
                "cpu_duty_pct", "gpu_duty_pct", "power", "engines",
                "seconds_since_last_ok", "error"]
+
+HEX_RE = re.compile(r"^#?[0-9A-Fa-f]{6}$")   # /api/cmd light zone colors
 
 
 def _csv_cell(v):
@@ -323,6 +326,8 @@ class Daemon:
         self._auto_last_msg = None           # auto-notify dedup (v1.9.20)
         self._auto_last_ts = 0.0
         self._auto_last_exe = ""             # foreground exe seen by the last poll
+        self._game_since = 0.0               # game-usage accounting (v1.9.21)
+        self._game_current = ""              # exe currently credited
         self.engines = {}                    # name -> running renderer thread
         self._engine_cmd = None              # ('music'|'ambient'|'temp', 'toggle')
         self._start_time = time.time()
@@ -544,7 +549,8 @@ class Daemon:
         rows: all samples whose time starts with that day's ISO date.
         Values: avg/max temp (deg C), avg/max RPM, EC-fail count, uptime_s
         (max uptime seen that day — the daemon restarts reset it),
-        samples count, on-battery share estimate (AC=0 / battery=1)."""
+        samples count, game foreground minutes by exe (usage, from the live
+        entry only)."""
         temps = [r["cpu_temp"] for r in rows
                  if r.get("ec_ok") and isinstance(r.get("cpu_temp"), (int, float))]
         rpms = [r["fan"]["cpu_rpm"] for r in rows
@@ -575,7 +581,9 @@ class Daemon:
             t = str(r.get("time", ""))
             if len(t) >= 10:
                 by_day.setdefault(t[:10], []).append(r)
-        # today's entry is live (recomputed each tick); past days freeze
+        # today's entry is live (recomputed each tick); past days freeze.
+        # "usage" (game foreground minutes, v1.9.21) is credited by the
+        # auto loop into the live entry — carried across re-aggregation.
         today = config.human_now()[:10]
         changed = False
         for day, day_rows in by_day.items():
@@ -586,8 +594,11 @@ class Daemon:
                 self._daily.append(entry)
                 changed = True
             elif day == today and existing != entry:
+                usage = existing.get("usage")
                 existing.clear()
                 existing.update(entry)
+                if usage:
+                    existing["usage"] = usage
                 changed = True
         self._daily.sort(key=lambda d: d.get("date", ""))
         self._daily = self._daily[-DAILY_MAX:]
@@ -920,7 +931,7 @@ class Daemon:
     def remote_command(self, payload):
         """Apply one control action from the dashboard/phone (dashboard.allow_control).
 
-        payload: {"action": "power"|"brightness"|"profile"|"engine"|"preview", ...}
+        payload: {"action": "power"|"brightness"|"profile"|"engine"|"preview"|"light", ...}
           power      {"value": true|false}
           brightness {"value": 0..3}
           profile    {"name": "gaming"}
@@ -928,6 +939,11 @@ class Daemon:
           preview    {"profile": {brightness, colors, mode, speed}} — live trial:
                      pushed to the EC for eyeballing but NOTHING is saved, so a
                      daemon restart restores the last real profile.
+          light      {"zones": ["ff0000", "00ff00", "0000ff"], "brightness": 0..3,
+                     "mode": "custom|breathe|...", "speed": 0..9, "restore": "profile"}
+                     — raw per-zone control for Home Assistant / scripts.
+                     Nothing is saved; when the app leaves the foreground (or
+                     explicitly via restore) the named profile is re-applied.
         """
         action = str(payload.get("action", ""))
         if action == "engine":
@@ -968,10 +984,62 @@ class Daemon:
                 state.update(prof)
                 state["power"] = True
                 config.apply_state(kb, state)
+            elif action == "light":
+                # raw per-zone control (Home Assistant / scripts) — never saved
+                zones = payload.get("zones")
+                if not isinstance(zones, list) or not zones \
+                        or len(zones) > 3 or not all(
+                            isinstance(z, str) and HEX_RE.match(z) for z in zones):
+                    raise ValueError("zones must be 1-3 hex colors")
+                state = dict(self.settings.snapshot())
+                colors = [z.lstrip("#").upper() for z in zones]
+                colors += [colors[-1]] * (3 - len(colors))   # repeat last zone
+                state["colors"] = colors
+                if "brightness" in payload:
+                    state["brightness"] = max(0, min(3, int(payload["brightness"])))
+                mode = str(payload.get("mode") or state.get("mode") or "custom")
+                if mode not in config.MODES:
+                    raise ValueError("unknown mode %r" % mode)
+                state["mode"] = mode
+                if "speed" in payload:
+                    state["speed"] = max(0, min(9, int(payload["speed"])))
+                state["power"] = True
+                config.apply_state(kb, state)
+                elog(EV_SETTING, light={"zones": colors, "mode": state["mode"]})
+                # optional one-shot restore: re-apply a real profile after
+                # restore_after seconds (default: immediately). The light
+                # state itself is never saved, so a daemon restart also
+                # restores the last real profile.
+                # NOTE: the restore runs OUTSIDE self.lock (schedule here,
+                # fire from remote_command's tail after the with-block ends)
+                # — calling connect() while holding the lock self-deadlocks
+                # (v1.9.13 lesson, enforced by audit_locks.py).
+                restore = str(payload.get("restore") or "")
+                restore_after = None
+                if restore:
+                    if restore not in self.settings.get("profiles"):
+                        raise ValueError("unknown restore profile %r" % restore)
+                    restore_after = max(0, int(payload.get("restore_after", 0)))
             else:
                 raise ValueError("unknown action %r" % action)
         log("remote cmd: %s %s" % (action, payload.get("value",
                                                       payload.get("name", ""))))
+        # deferred light-restore: runs after the with-lock block above has
+        # ended (immediate restore or a timer — both free to call connect())
+        if action == "light" and restore:
+            def _restore(name=restore):
+                try:
+                    config.apply_profile(self.connect(), self.settings, name)
+                    self._auto_state = ""   # let auto rules re-engage
+                    log("light restore -> %s" % name)
+                except Exception as exc:
+                    log("light restore failed: %s" % exc)
+            if restore_after:
+                t = threading.Timer(restore_after, _restore)
+                t.daemon = True
+                t.start()
+            else:
+                _restore()
         self._update_tray()
         return {"ok": True, "action": action}
 
@@ -1091,6 +1159,31 @@ class Daemon:
         self._auto_last_msg, self._auto_last_ts = msg, now
         elog(EV_AUTO, title=title)
         self.notify("auto_profile", title, msg)
+
+    # ---------- game-usage accounting (v1.9.21) ----------
+    def _game_credit(self, minutes):
+        """Credit `minutes` of foreground time to the currently tracked exe in
+        today's daily entry (usage = {exe: minutes})."""
+        if not self._game_current or minutes <= 0:
+            return
+        day = config.human_now()[:10]
+        entry = next((d for d in self._daily if d.get("date") == day), None)
+        if entry is None:
+            return
+        usage = entry.setdefault("usage", {})
+        usage[self._game_current] = round(usage.get(self._game_current, 0.0)
+                                          + minutes, 2)
+
+    def _game_track(self, exe):
+        """Called each poll with the current foreground exe; credits elapsed
+        time to the previous exe on transitions. Rules without usage data yet
+        are fine — the entry simply starts empty."""
+        now = time.time()
+        if exe != self._game_current:
+            if self._game_current and self._game_since:
+                self._game_credit((now - self._game_since) / 60.0)
+            self._game_current = exe
+            self._game_since = now
 
     def _status_body(self):
         """Current snapshot + recent history for the dashboard/API."""
@@ -1525,6 +1618,7 @@ class Daemon:
                 if ap.get("enabled") and ap.get("games"):
                     exe = foreground_exe()
                     self._auto_last_exe = exe
+                    self._game_track(exe if exe in ap.get("games", {}) else "")
                     if exe:
                         decision = ap["games"].get(exe, "")
                         if decision:

@@ -105,7 +105,7 @@ DEFAULTS = {
     "updates": {"enabled": False, "repo": "NarDecH/ClevoBacklight", "interval_s": 21600},
 }
 
-APP_VERSION = "1.9.20"
+APP_VERSION = "1.9.21"
 
 MODES = ["custom", "breathe", "cycle", "random", "dance", "tempo", "flash", "wave"]
 
