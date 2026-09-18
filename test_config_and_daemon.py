@@ -1031,6 +1031,58 @@ def test_schedule_wrap_still_ok():
     print("schedule wrap-midnight still OK")
 
 
+def test_foreground_exe_contract():
+    """Regression for v1.9.17 live test: foreground_exe() must use
+    QueryFullProcessImageNameW (GetModuleBaseNameW silently fails with
+    PROCESS_QUERY_LIMITED_INFORMATION -> always '' in the field)."""
+    import ctypes
+    import clevo_daemon
+
+    # smoke: returns a str, never raises (real call on the dev machine)
+    val = clevo_daemon.foreground_exe()
+    assert isinstance(val, str), type(val)
+
+    # wiring: no matter what the API returns, the wrapper must lowercase and
+    # never leak an exception -> mock the two windows calls end to end
+    class _FakeUser32:
+        def GetForegroundWindow(self):
+            return 4242
+
+        def GetWindowThreadProcessId(self, hwnd, byref_pid):
+            byref_pid._obj.value = 777
+            return 1
+
+    class _FakeKernel32:
+        state = {"fail": False}
+
+        def OpenProcess(self, mask, inherit, pid):
+            return 999
+
+        def CloseHandle(self, h):
+            return True
+
+        def QueryFullProcessImageNameW(self, h, flags, buf, byref_size):
+            if self.state["fail"]:
+                return 0
+            buf.value = "C:\\Windows\\System32\\NoTePad.EXE"
+            byref_size._obj.value = len(buf.value)
+            return 1
+
+    monkey = _Monkey()
+    fakek = _FakeKernel32()
+    monkey.setattr(clevo_daemon, "user32", _FakeUser32())
+    monkey.setattr(clevo_daemon, "kernel32q", fakek)
+
+    # API failure -> function must return '' (not raise)
+    fakek.state["fail"] = True
+    assert clevo_daemon.foreground_exe() == ""
+
+    # success path with a full path -> basename, lowercased
+    fakek.state["fail"] = False
+    assert clevo_daemon.foreground_exe() == "notepad.exe"
+    print("foreground_exe contract OK")
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="clevo_test_")
     test_health_check_roundtrip(tmp)
@@ -1063,6 +1115,7 @@ def main():
     test_dashboard_handler(tmp)
     test_dashboard_token_and_lan_fallback(tmp)
     test_fan_controller()
+    test_foreground_exe_contract()
     print("ALL CONFIG/DAEMON MIXIN TESTS PASSED")
 
 

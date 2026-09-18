@@ -10,7 +10,7 @@ set "HERE=%~dp0"
 set "EXE=%HERE%dist\ClevoBacklight.exe"
 
 set "VER=%~1"
-if "%VER%"=="" set "VER=1.9.17"
+if "%VER%"=="" set "VER=1.9.18"
 
 if not exist "%EXE%" (
     echo [FAIL] %EXE% not found - build first with Build-Exe.bat

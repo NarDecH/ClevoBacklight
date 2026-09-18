@@ -2,6 +2,19 @@
 
 รูปแบบอ้างอิง [Keep a Changelog](https://keepachangelog.com/) — เวอร์ชันตามเสถียรภาพของฟีเจอร์ (ไม่มี release สาธารณะ ใช้ภายในเครื่อง)
 
+## [1.9.18] — 2026-09-18
+
+### Fixed
+- **ฟีเจอร์ auto-profile หลักใช้ไม่ได้จริง** — `foreground_exe()` เปิด process ด้วย `PROCESS_QUERY_LIMITED_INFORMATION` แล้วเรียก `GetModuleBaseNameW` ซึ่งต้องการ `PROCESS_VM_READ` (ไม่ได้มาใน mask นี้) → คืน `''` **ทุกครั้ง**กับ process ที่ integrity สูงกว่า ทำให้กฎ `exe → โปรไฟล์` ไม่เคยจับคู่ จับได้จากการทดสอบ live บนเครื่อง (pid เปิดได้, `GetModuleBaseNameW` = 0 / ERROR_ACCESS_DENIED 5) — เปลี่ยนเป็น `QueryFullProcessImageNameW` (ออกแบบมาสำหรับ mask จำกัด, ทำงาน unprivileged) + ตัด basename เอง · **ยืนยันสด**: โฟกัส notepad → สลับเป็นโปรไฟล์กฎเองภายใน ~5 วิ, เลิกโฟกัส → คืน `restore_profile`
+- เก็บ `psapi` import ที่ไม่ถูกใช้แล้วออกจาก daemon
+
+### Added
+- `test_foreground_exe_contract` — regression test: ยิง fake Win32 API ยืนยันว่าล้มเหลวของ API = คืน `''` ไม่ raise, และ success path ตัด basename + lowercase ถูกต้อง (จับบั๊กแบบนี้ได้ตั้งแต่ CI ในอนาคต)
+
+### Verified
+- live end-to-end บน daemon exe จริง: POST `/api/profiles` + `/api/auto_profiles` ตั้งกฎ notepad → foreground_exe เจอ `notepad.exe` → status `profile: ap-selftest` → unfocus → `profile: work` · ปิดกฎ + ลบโปรไฟล์ทดสอบแล้ว
+- test_all ผ่าน 9/9 (smoke 15/15) ทั้งก่อนและหลังแก้
+
 ## [1.9.17] — 2026-09-18
 
 ### Added

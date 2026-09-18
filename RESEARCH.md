@@ -179,7 +179,7 @@
 
 | ด้าน | การตัดสินใจ | เหตุผล |
 |---|---|---|
-| ตรวจแอปฟื้กซ์ | `GetForegroundWindow` + `GetWindowThreadProcessId` + `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` + `GetModuleBaseNameW` → ชื่อ `.exe` lowercase | lightweight ทุก 5 วิไม่หนักเครื่อง · query-limited ไม่ต้องสิทธิ์พิเศษ · **ไม่แตะ window title** (กันเหนียบกับเกม anti-cheat บางตัวที่เฝ้า title) |
+| ตรวจแอปฟื้กซ์ | `GetForegroundWindow` + `GetWindowThreadProcessId` + `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` + `QueryFullProcessImageNameW` → ตัด basename → lowercase | lightweight ทุก 5 วิไม่หนักเครื่อง · query-limited ไม่ต้องสิทธิ์พิเศษ · **ไม่แตะ window title** (กันเหนียบกับเกม anti-cheat บางตัวที่เฝ้า title) — *v1.9.18: เดิมใช้ `GetModuleBaseNameW` ซึ่ง**ใช้ไม่ได้จริง**กับ mask นี้ ดูหัวข้อ 13* |
 | ตัดสินใจ | `exe` → กฎ `games[exe]` → `apply_profile` เดิม; แอปที่มีกฎออกจากฟื้กซ์ + ตั้ง `restore_profile` → คืนโปรไฟล์ | ตัดสินใจทุกรอบเป็น state machine เดียว: `decision != _auto_state` ครั้งเดียวจบ — debounce ฟรี, รองรับสลับไปมาระหว่างเกม |
 | ลำดับความสำคัญ | game watcher ชนะ schedule ตามเวลา (schedule ทำงานเมื่อ watcher "ไม่มีคำตอบ") | คนเปิดเกมตอนตีสองก็ควรได้โปรไฟล์เกม ไม่ใช่โปรไฟล์กลางคืน |
 | API | `GET/POST /api/auto_profiles` · POST ผ่าน `config.upsert_auto_profiles` · ลบกฎด้วยค่า `null` | ตามแบบ `/api/profiles` เดิมทุกด้าน (allow_control + atomic validate + events log) |
@@ -190,5 +190,21 @@
 
 **ข้อจำกัดที่ยอมรับ:** รู้จำแอปจากชื่อ `.exe` เท่านั้น (ไม่อ่าน path) — สองเกมชื่อ exe เดียวกันถือเป็นอันเดียว · UWP/เกม Store บางตัวรายงาน exe ตัวกลาง (เช่น `applicationframehost.exe`) จึงควรกฎด้วยชื่อที่เห็นจริงใน tag ของการ์ด (กดเพิ่มจากชื่อที่ daemon เห็นไม่ได้เพราะ UI ไม่รู้ — อนาคต: ปุ่ม "จับแอปฟื้กซ์ปัจจุบัน")
 
+## 13) บทเรียน Win32 access mask — GetModuleBaseNameW กับ PROCESS_QUERY_LIMITED_INFORMATION (v1.9.18)
+
+**อาการ:** ฟีเจอร์ auto-profile ที่ประกาศว่า "เสร็จแล้ว" ใน v1.9.17 ใช้ไม่ได้จริงบนเครื่อง — กฎ notepad.exe ไม่เคยจับคู่ ทั้งที่ daemon รัน elevated
+
+**การไล่หลักฐาน (รอบเดียวจบเพราะเทียบรายขั้น):** `FindWindowW` เจอ notepad → `foreground_exe()` คืน `''` ซ้ำ ๆ → เปิดขยายฟังก์ชันทีละค่า: `GetForegroundWindow` = hwnd จริง · `GetWindowThreadProcessId` = pid จริง · `OpenProcess(0x1000)` = handle จริง · `GetModuleBaseNameW` = **0 และ `GetLastError()` = 5 (ERROR_ACCESS_DENIED)**
+
+**สาเหตุ (ความรู้ที่เอกสาร MS เขียนไว้แต่มองข้ามง่าย):** `GetModuleBaseNameW` ต้องการ `PROCESS_VM_READ` นอกจาก query — แต่ mask `PROCESS_QUERY_LIMITED_INFORMATION` **ไม่รวม** `PROCESS_VM_READ` และไม่มีทางรวมได้เพราะเป็น "limited" ที่ออกแบบให้เรียกได้แม้กับ process ที่สูงกว่า → ผลคือฟังก์ชันคู่นี้**เข้ากันไม่ได้โดยดีไซน์** กับ process integrity สูงกว่า (และพาดหลายเคสอื่น) — จุดพิษคือ `OpenProcess` สำเร็จ ทำให้โค้ดดูถูกต้อง และ try/except ในฟังก์ชันกลืนอาการเป็น `''` เงียบ ๆ
+
+**ทางแก้ที่ถูกต้อง:** `QueryFullProcessImageNameW(handle, 0, buf, &size)` — API ที่ออกแบบมาสำหรับ mask limited โดยเฉพาะ ทำงาน unprivileged กับ process ใด ๆ → ตัด basename เองจาก path เต็ม
+
+**บทเรียนวิศวกรรม (สำคัญกว่าบั๊กเอง):**
+1. **"คอมไพล์ผ่าน + ไม่ raise" ≠ ทำงาน** — ฟังก์ชันที่ wrap try/except แล้วคืนค่าว่างเมื่อล้ม ทำให้ failure มองไม่เห็นเลยทั้ง test ทั้ง field ต้อง test "สายสัญญาณจริง" (ยิง API จริงดูค่า)
+2. **การเทียบรายขั้น (differential probe) หาบั๊กแบบนี้ได้ในรอบเดียว** — แทนที่จะเดา เปิดขยายทีละ call พร้อม `GetLastError()`
+3. **ฟีเจอร์ที่แตะ OS boundary ต้องผ่าน live e2e ก่อนประกาศเสร็จ** — unit test ที่ mock ทุกอย่างไม่มีทางจับ mismatch ระดับ access mask (test contract ใหม่จับได้แค่ว่า wiring ถูก ส่วน e2e จับว่า OS ยอมจริง)
+4. บทเรียนซ้ำของโปรเจกต์: *ของที่ยังไม่เคยรันจริงบนเครื่อง = ยังไม่เสร็จ* (รอบนี้คือเคสที่สอง ต่อจาก deadlock v1.9.13 ที่จับด้วย py-spy)
+
 ---
-*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.17) · หน้าเว็บฉบับสวย: `docs/research.html` · ความปลอดภัย: `SECURITY.md`*
+*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.18) · หน้าเว็บฉบับสวย: `docs/research.html` · ความปลอดภัย: `SECURITY.md`*

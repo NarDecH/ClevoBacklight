@@ -50,7 +50,6 @@ except ImportError:
     HAS_TRAY = False
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
-psapi = ctypes.WinDLL("psapi", use_last_error=True)
 kernel32q = ctypes.WinDLL("kernel32", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)   # monitor: GetModuleHandleW
 
@@ -71,9 +70,16 @@ def foreground_exe():
         if not h:
             return ""
         try:
-            buf = ctypes.create_unicode_buffer(260)
-            n = psapi.GetModuleBaseNameW(h, None, buf, 260)
-            return buf.value.lower() if n else ""
+            # GetModuleBaseNameW needs PROCESS_VM_READ which the LIMITED access
+            # mask does NOT include -> fails (ERROR_ACCESS_DENIED) for
+            # higher-integrity processes (observed live on this machine).
+            # QueryFullProcessImageNameW is designed for this mask and works
+            # unprivileged.
+            buf = ctypes.create_unicode_buffer(1024)
+            size = ctypes.wintypes.DWORD(1024)
+            if not kernel32q.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)) or not buf.value:
+                return ""
+            return buf.value.rsplit("\\", 1)[-1].rsplit("/", 1)[-1].lower()
         finally:
             kernel32q.CloseHandle(h)
     except Exception:
