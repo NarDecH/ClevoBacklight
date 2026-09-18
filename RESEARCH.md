@@ -207,5 +207,21 @@
 4. บทเรียนซ้ำของโปรเจกต์: *ของที่ยังไม่เคยรันจริงบนเครื่อง = ยังไม่เสร็จ* (รอบนี้คือเคสที่สอง ต่อจาก deadlock v1.9.13 ที่จับด้วย py-spy)
 5. **บั๊กพี่น้องที่ตามมาในวันเดียว (v1.9.19):** สคริปต์ PowerShell เขียน settings.json แบบ UTF-8 **มี BOM** → loader ใช้ `utf-8` เปลี่ยน `\ufeff` เป็นชื่อ key แรก → settings ทั้งไฟล์ฟอลแบ็ก defaults **เงียบ ๆ** (token หาย = dashboard เปิดกว้าง) จับได้เพราะ smoke assert 401 แต่ได้ 200 — แก้ loader เป็น `utf-8-sig` + regression test บทเรียน: silent fallback ของ config ต้องถูกออกแบบให้ "ผิดแล้วมองเห็น" (401→200 คือสัญญาณที่ test ต้อง assert ไว้)
 
+## 14) Auto-profile observability + config transparency (v1.9.20)
+
+**โจทย์:** หลัง v1.9.18 แก้ access mask แล้ว ยังขาดอีก 3 อย่างของระบบ automation ที่ดี: รู้ว่ากฎกำลังทำอะไร (observability), รู้ทันทีเมื่อมันสลับ (feedback), และรู้ทันทีเมื่อ config พัง (transparency)
+
+| ฟีเจอร์ | การตัดสินใจ | เหตุผล |
+|---|---|---|
+| ปุ่มจับแอปฟื้กซ์ | `GET /api/foreground` (gate allow_control) + ปุ่มบนการ์ดเติมฟอร์ม | ปัญหาจริง: ผู้ใช้ไม่รู้ชื่อ exe ที่ daemon เห็น (UWP รายงาน `applicationframehost.exe`) — ตัว daemon ต้องเป็นคนบอก ไม่ใช่ให้เดา |
+| แจ้งเตือนสลับ | `notify("auto_profile")` ใช้ช่องทางเดิมทั้งหมด (toast/Discord/Telegram) + event ใหม่ `auto_profile` | ไม่สร้าง pipeline ใหม่ — ใช้ gate/dedup/hook ที่มี · **default ปิด** เพราะ notification ที่ทุกคนได้โดยไม่ได้ขอ = สแปม |
+| dedup สลับไปมา | ข้อความเดียวกัน ยับ 10 นาที (`_auto_last_msg` + `_auto_last_ts`) | เกมล้ม/โฟกัสสลับเร็วคือเคสปกติ — ต้องยับที่ฝั่ง message ไม่ใช่ฝั่งช่องทาง |
+| สถานะกฎสด | `auto_active` (decision string ตัด `@`) + `auto_exe` ใน `/api/status` และ status.json | status.json เขียนโดย health loop อยู่แล้ว — เพิ่ม 2 key จบ ไม่ต้องไฟล์/ระบบใหม่ · **ไม่ใส่ใน history ring** เพื่อกัน key แปลกปลอมจาก status.json ไหลเข้าหน้าเว็บ (status.json เป็นแหล่งที่ test ยังเขียนมือได้) |
+| config transparency | `Settings.load_info()` + `config_ok`/`config_error` ใน status + chip เตือนบนหน้าเว็บ | บทเรียน v1.9.19 ตรง ๆ: silent fallback ต้องกลายเป็นสัญญาณที่มองเห็น — test ตรวจเคสไฟล์หาย (สะอาด) แยกจากไฟล์พัง (ต้องมีเหตุผล) |
+
+**บั๊กที่ test จับระหว่างทำ:** `self._load_info = ""` ถูกวาง**หลัง** `self._load()` ใน `__init__` ทำให้เหตุผลที่ record ไว้ถูกทับด้วยค่าว่างเสมอ — ลำดับการกำหนด state ก่อนเรียก loader คือสัญญาณเสี่ยงที่ควรสังเกต (แก้: ตั้งค่าเริ่มต้นก่อน, loader เขียนทับเมื่อมีเหตุผลจริง)
+
+**บทเรียนซ้ำ:** make_daemon (test helper สร้าง daemon ด้วย `__new__`) ลืม attrs ใหม่ได้ทุกรอบที่เพิ่ม field — ทางแก้เชิงโครงสร้างคือให้ attrs เหล่านี้มีค่า default ที่ระดับ class หรือทำ test helper ให้ sync อัตโนมัติ (ยังไม่ทำ — ยอมรับความเสี่ยงเพราะ test ทันทีที่ลืม)
+
 ---
-*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.19) · หน้าเว็บฉบับสวย: `docs/research.html` · ความปลอดภัย: `SECURITY.md`*
+*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.20) · หน้าเว็บฉบับสวย: `docs/research.html` · ความปลอดภัย: `SECURITY.md`*

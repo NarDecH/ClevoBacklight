@@ -2,6 +2,17 @@
 
 รูปแบบอ้างอิง [Keep a Changelog](https://keepachangelog.com/) — เวอร์ชันตามเสถียรภาพของฟีเจอร์ (ไม่มี release สาธารณะ ใช้ภายในเครื่อง)
 
+## [1.9.20] — 2026-09-18
+
+### Added
+- **ปุ่ม "◎ จับแอปฟื้กซ์"** ในการ์ด auto-profile — ดึงชื่อ `.exe` ที่ daemon เห็นจริงตอนนี้ (`GET /api/foreground`, gate ด้วย allow_control) มาเติมฟอร์มให้อัตโนมัติ แก้ปัญหา "ไม่รู้ชื่อ exe ที่ daemon เห็น" (โดยเฉพาะ UWP/แอป Store ที่รายงาน `applicationframehost.exe`) — ถ้าไม่ใช่ .exe จะแจ้งชื่อที่เห็นให้ทันที
+- **แจ้งเตือนเมื่อ auto-profile สลับจริง** — toast บนเครื่อง + Discord/Telegram + event `auto_profile` ใน events.jsonl · ผ่าน dedup: ข้อความเดียวกัน (กฎ/โปรไฟล์เดียวกัน) ถูกยับไว้ 10 นาที กันสแปมตอนสลับไปมาเร็ว · เปิด/ปิดได้จากช่อง "สลับโปรไฟล์อัตโนมัติ" ในแผงแจ้งเตือน (default **ปิด** — คนที่ตั้งแจ้งเตือนไว้แล้วจะไม่ถูก spam โดยไม่ได้ตั้งใจ)
+- **สถานะกฎที่ active แบบสด** — `/api/status` เพิ่ม `auto_active` (กฎล่าสุดที่ยิง เช่น `game:gaming` / `restore:work` / `sched:night`) และ `auto_exe` (แอปที่ daemon เห็นล่าสุด) · การ์ดแสดงบรรทัดสด "◎ กำลังใช้กฎเกม: gaming (แอป x.exe ฟื้กซ์)" · บันทึกลง status.json ด้วย (ใน health loop — ไม่เข้า history ring กัน key แปลกปลอมไหลไปหน้าเว็บ)
+- **config loader โปร่งใส (บทเรียน v1.9.19)** — `Settings` จำเหตุผลที่ต้องใช้ defaults (ไฟล์พัง/อ่านไม่ได้) ผ่าน `load_info()` · `/api/status` เพิ่ม `config_ok` + `config_error` · Dashboard แสดง chip เตือน "⚠ …" ถัดจากเวอร์ชันเมื่อ settings มีปัญหา — ความเสียหายแบบเงียบ ๆ จะไม่ผ่านไปได้อีก
+
+### Tests
+- `test_v1920_features` — loader info (ไฟล์หาย = clean, ไฟล์พัง = มีเหตุผล + defaults), auto-notify dedup (3 เคสรวม window expiry), status fields + การกัน key ปลอมจาก status.json (poisoned-file probe), endpoint foreground (200 + 403 gate) · แก้ `make_daemon` ทั้งสองไฟล์ test ให้ครบ attrs ใหม่
+
 ## [1.9.19] — 2026-09-18
 
 ### Fixed

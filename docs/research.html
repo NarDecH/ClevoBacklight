@@ -74,6 +74,7 @@
   <a href="#s9">9 งานต่อยอด</a>
   <a href="#s11">11 PWA/offline</a>
   <a href="#s13">13 Win32 access mask</a>
+  <a href="#s14">14 observability</a>
 </div></nav>
 
 <div class="wrap">
@@ -285,7 +286,20 @@
   <p><b>⑤ บั๊กพี่น้อง v1.9.19 (จับได้ในวันเดียวกัน):</b> PowerShell เขียน settings.json แบบ UTF-8 <b>มี BOM</b> → loader ใช้ <code>utf-8</code> เปลี่ยน <code>\ufeff</code> เป็นชื่อ key แรก → settings ฟอลแบ็ก defaults <b>เงียบ ๆ</b> (token หาย = dashboard ไม่มี auth — smoke assert 401 ได้ 200 เลยจับได้ทันที) · แก้ loader เป็น <code>utf-8-sig</code> + regression test — บทเรียน: silent fallback ต้องออกแบบให้ "ผิดแล้วมองเห็น"</p>
 </section>
 
-<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.19) · ความปลอดภัย: SECURITY.md</footer>
+<section id="s14">
+  <h2><span class="no">14</span> Auto-profile observability + config transparency (v1.9.20)</h2>
+  <table>
+    <tr><th>ฟีเจอร์</th><th>การตัดสินใจ</th><th>เหตุผล</th></tr>
+    <tr><td>ปุ่มจับแอปฟื้กซ์</td><td><code>GET /api/foreground</code> (gate allow_control) + ปุ่มบนการ์ดเติมฟอร์มให้</td><td>ผู้ใช้ไม่รู้ชื่อ exe ที่ daemon เห็นจริง (UWP → applicationframehost.exe) — daemon ต้องเป็นคนบอก</td></tr>
+    <tr><td>แจ้งเตือนสลับ</td><td>ใช้ pipeline เดิม notify("auto_profile") toast/Discord/Telegram + event ใหม่</td><td>ไม่สร้างช่องทางใหม่ · <b>default ปิด</b> — แจ้งเตือนที่ทุกคนได้โดยไม่ขอ = สแปม</td></tr>
+    <tr><td>dedup สลับไปมา</td><td>ข้อความเดียวกัน ยับ 10 นาที</td><td>โฟกัสสลับเร็วคือเคสปกติ — ยับที่ฝั่ง message ไม่ใช่ช่องทาง</td></tr>
+    <tr><td>สถานะกฎสด</td><td><code>auto_active</code> + <code>auto_exe</code> ใน /api/status · ไม่ใส่ใน history ring</td><td>กัน key ปลอมจาก status.json (แหล่งที่เขียนมือได้) ไหลเข้าหน้าเว็บ — test probe ด้วย poisoned file</td></tr>
+    <tr><td>config transparency</td><td><code>load_info()</code> + <code>config_ok</code>/<code>config_error</code> + chip เตือนบนหน้าเว็บ</td><td>บทเรียน v1.9.19: silent fallback ต้องกลายเป็นสัญญาณที่มองเห็น</td></tr>
+  </table>
+  <p><b>บั๊กที่ test จับระหว่างทำ:</b> <code>self._load_info = ""</code> ถูกวาง<b>หลัง</b> <code>self._load()</code> ใน <code>__init__</code> — เหตุผลที่ loader record ไว้ถูกทับด้วยค่าว่างเสมอ (ลำดับ state ก่อน loader คือจุดเสี่ยงที่ควรจับตา)</p>
+</section>
+
+<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.20) · ความปลอดภัย: SECURITY.md</footer>
 </div>
 </body>
 </html>

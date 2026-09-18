@@ -29,7 +29,7 @@
 | 🔁 Daemon autostart | คืนค่าไฟเองหลัง boot / sleep / ต่อ dock + tray icon |
 | 🖥️ **Ambient mode** | ไฟเปลี่ยนสีตามหน้าจอจริง (สไตล์ Ambilight, DirectX capture) |
 | 🎛️ **Color profiles** | โปรไฟล์สีตั้งชื่อได้ (Gaming/Work/Night) สลับผ่าน GUI/tray/hotkey/CLI |
-| 🎮 **Game auto-profile** | เปิดเกม (foreground = ไฟล์ .exe ที่กำหนด) → สลับโปรไฟล์อัตโนมัติ ปิดเกมแล้วกลับเอง |
+| 🎮 **Game auto-profile** | เปิดเกม (foreground = ไฟล์ .exe ที่กำหนด) → สลับโปรไฟล์อัตโนมัติ ปิดเกมแล้วกลับเอง · ตั้งกฎจาก Dashboard พร้อมปุ่ม "จับแอปฟื้กซ์" (v1.9.20) · แจ้งเตือนเมื่อสลับได้ (เปิดในแผงแจ้งเตือน) |
 | ⏰ **Day schedule** | เปลี่ยนโปรไฟล์ตามเวลา (เช่น 22:00 → night) ข้ามเที่ยงคืนได้ |
 | 🩺 **Health check** | daemon ตรวจ EC + อุณหภูมิ CPU เป็นระยะ เขียน `status.json` ให้เครื่องมืออื่นอ่าน (ดูย่อได้จาก tray) |
 | 📊 **Live Dashboard** | เว็บสถานะสดที่ `http://127.0.0.1:8787` — กราฟอุณหภูมิย้อนหลัง + เอนจินที่รัน (เปิดจาก tray) |

@@ -33,6 +33,11 @@ def make_daemon(tmp):
     d.engines = {}
     d._engine_cmd = None
     d._fan_stall_notified = False
+    d._auto_state = ""                    # v1.9.20 status fields
+    d._auto_lock = threading.Lock()
+    d._auto_last_msg = None
+    d._auto_last_ts = 0.0
+    d._auto_last_exe = ""
     d._start_time = time.time()
     d._health_stop = threading.Event()
     d._history = []

@@ -46,6 +46,12 @@ def make_daemon(tmpdir, monkey_overrides=None):
     d.engines = {}
     d._engine_cmd = None
     d._fan_stall_notified = False
+    d._auto_state = ""                    # v1.9.20 status fields
+    d._auto_lock = threading.Lock()
+    d._auto_last_msg = None
+    d._auto_last_ts = 0.0
+    d._auto_last_exe = ""
+    d._daily = []                        # daily-summary store (v1.9.20 test)
     d._start_time = time.time()
     d._health_stop = threading.Event()
     d._history = []
@@ -1105,6 +1111,97 @@ def test_settings_bom_tolerant(tmp):
     print("settings BOM-tolerant OK")
 
 
+def test_v1920_features(tmp):
+    """v1.9.20: transparent config loader, auto-notify dedup, auto_active /
+    config_ok in /api/status (and NOT leaking into history rows), and the
+    /api/foreground endpoint (allow_control gated)."""
+    import urllib.request
+    import urllib.error
+
+    # ---- A. config loader reports why defaults were substituted ----
+    missing = config.Settings(path=os.path.join(tmp, "nope.json"))
+    assert missing.load_info() == "", missing.load_info()   # fresh install = clean
+    broken = os.path.join(tmp, "broken.json")
+    with open(broken, "w", encoding="utf-8") as f:
+        f.write("{not json")
+    bad = config.Settings(path=broken)
+    assert bad.load_info(), "broken file must set load_info"
+    assert bad.get("dashboard", {}).get("token", "") == ""   # defaults active
+    good = os.path.join(tmp, "good.json")
+    with open(good, "w", encoding="utf-8") as f:
+        json.dump({"power": False}, f)
+    ok = config.Settings(path=good)
+    assert ok.load_info() == ""
+
+    # ---- B. auto-notify dedup (same message within 10 min -> suppressed) ----
+    d = make_daemon(tmp)
+    calls = []
+    d.notify = lambda kind, title, msg: calls.append((kind, title, msg))
+    d._auto_notify("t1", "game x.exe -> prof")
+    d._auto_notify("t2", "game x.exe -> prof")          # same msg inside window
+    assert len(calls) == 1, calls
+    d._auto_notify("t1", "restore -> work")             # different msg -> passes
+    assert len(calls) == 2, calls
+    assert calls[0][0] == "auto_profile"
+    d._auto_last_ts = time.time() - 700                 # window expired
+    d._auto_notify("t1", "game x.exe -> prof")
+    assert len(calls) == 3, calls
+
+    # ---- C. status body: config_ok / auto_active / auto_exe; history clean ----
+    assert d._status_body()["config_ok"] is True
+    assert d._status_body()["auto_active"] == ""
+    d._auto_last_exe = "game.exe"
+    with d._auto_lock:
+        d._auto_state = "@game:gaming"
+    body = d._status_body()
+    assert body["auto_active"] == "game:gaming", body.get("auto_active")
+    assert body["auto_exe"] == "game.exe"
+    # a poisoned status.json must not propagate into status/history keys
+    d._history = [{"time": "t", "ec_ok": True, "cpu_temp": 50}]
+    status_path = os.path.join(tmp, "status.json")
+    with open(status_path, "w", encoding="utf-8") as f:
+        json.dump({"time": "t", "ec_ok": True, "cpu_temp": 50,
+                   "auto_active": "LIES", "config_ok": False}, f)
+    old = clevo_daemon.STATUS_PATH
+    clevo_daemon.STATUS_PATH = status_path
+    try:
+        body = d._status_body()
+        assert body["auto_active"] == "game:gaming"
+        assert body["config_ok"] is True
+        assert "auto_active" not in body["history"][0]
+        assert "config_ok" not in body["history"][0]
+    finally:
+        clevo_daemon.STATUS_PATH = old
+
+    # ---- D. GET /api/foreground: allow_control gate + shape ----
+    # explicit dashboard config: earlier tests (token/lan) may have persisted a
+    # token into the shared tmp settings.json
+    d.settings.set("dashboard", {"enabled": True, "bind": "loopback",
+                                 "token": "", "serve_history_csv": True,
+                                 "allow_control": True})
+    port = d.start_status_server(port=0)
+    srv = d._dash_server
+    try:
+        with urllib.request.urlopen(
+                "http://127.0.0.1:%d/api/foreground" % port, timeout=5) as r:
+            payload = json.loads(r.read().decode("utf-8"))
+        assert "exe" in payload, payload
+        d.settings.get("dashboard")["allow_control"] = False
+        try:
+            urllib.request.urlopen(
+                "http://127.0.0.1:%d/api/foreground" % port, timeout=5)
+            raise AssertionError("403 expected")
+        except urllib.error.HTTPError as e:
+            assert e.code == 403
+    finally:
+        try:
+            srv.shutdown()
+            srv.server_close()
+        except Exception:
+            pass
+    print("v1.9.20 features OK (loader info, auto-notify dedup, status fields, foreground endpoint)")
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="clevo_test_")
     test_health_check_roundtrip(tmp)
@@ -1139,6 +1236,7 @@ def main():
     test_fan_controller()
     test_foreground_exe_contract()
     test_settings_bom_tolerant(tmp)
+    test_v1920_features(tmp)
     print("ALL CONFIG/DAEMON MIXIN TESTS PASSED")
 
 

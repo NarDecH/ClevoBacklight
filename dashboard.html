@@ -42,7 +42,7 @@
 <body>
 <div id="offline" style="display:none; background:var(--bad); color:#fff; text-align:center; padding:8px; font-size:.85rem">⊘ ออฟไลน์ — แสดงหน้าจอค้างไว้ จะกลับมาสดเมื่อเชื่อม daemon ได้อีกครั้ง</div>
 <h1>Clevo Backlight — Live Dashboard</h1>
-<div class="sub">daemon <span class="mono" id="ver">…</span> · refresh ทุก 5 วิ จาก <span class="mono">/api/status</span> · <span class="chip" id="updateChip">—</span></div>
+<div class="sub">daemon <span class="mono" id="ver">…</span> · refresh ทุก 5 วิ จาก <span class="mono">/api/status</span> · <span class="chip" id="updateChip">—</span> <span class="chip" id="configChip" style="display:none"></span></div>
 
 <div class="grid">
   <div class="card"><div class="k">สถานะ EC</div><div class="v" id="ec">…</div></div>
@@ -81,6 +81,7 @@
     <label class="chip"><input type="checkbox" id="nEcFail"> EC ล่ม</label>
     <label class="chip"><input type="checkbox" id="nEcRec"> EC กลับมา</label>
     <label class="chip"><input type="checkbox" id="nFan"> พัดลมหยุดหมุน</label>
+    <label class="chip"><input type="checkbox" id="nAuto"> สลับโปรไฟล์อัตโนมัติ</label>
     <select id="nThr" class="chip"><option>75</option><option>80</option><option>85</option><option selected>90</option><option>95</option><option>100</option></select>
   </div>
   <div class="row" style="margin-top:8px">
@@ -166,11 +167,13 @@
     <label class="k">โปรแกรม (.exe)<br><input id="apExe" placeholder="cyberpunk2077.exe" style="background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:6px; padding:6px 8px; width:170px"></label>
     <label class="k">ใช้โปรไฟล์<br><select id="apProf" style="background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px"></select></label>
     <button id="apAdd" style="background:var(--panel2); color:var(--acc); border:1px solid var(--line); border-radius:6px; padding:7px 12px; cursor:pointer">+ เพิ่มกฎ</button>
+    <button id="apCatch" title="ดึงชื่อ .exe ของหน้าต่างที่กำลังโฟกัสจริง (ตามที่ daemon เห็น)" style="background:var(--panel2); color:var(--acc2); border:1px solid var(--line); border-radius:6px; padding:7px 12px; cursor:pointer">◎ จับแอปฟื้กซ์</button>
     <label class="k">เมื่อปิดแอป กลับไปใช้<br><select id="apRestore" style="background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px"><option value="">— ไม่เปลี่ยน —</option></select></label>
     <label class="k"><input type="checkbox" id="apOn"> เปิดใช้งาน</label>
     <button id="apSave" style="background:var(--panel2); color:var(--acc); border:1px solid var(--line); border-radius:6px; padding:7px 12px; cursor:pointer">บันทึก</button>
   </div>
   <div id="apList" style="margin-top:8px; font-size:.9rem"></div>
+  <div id="apLive" style="margin-top:8px; font-size:.85rem; color:var(--mut)"></div>
   <div id="apMsg" style="margin-top:6px; color:var(--mut); font-size:.85rem"></div>
 </div>
 <div class="panel" id="profileEditor" style="display:none">
@@ -307,10 +310,23 @@ function render(d){
       (fs.last === 0 ? '<span class="chip bad">⚠ พัดลมหยุดหมุน</span>' : '');
   } else stEl.innerHTML = '<span class="chip">ยังไม่มีข้อมูลพัดลม</span>';
   $('uptime').textContent = fmtUptime(d.uptime_s);
+  const cChip = $('configChip');
+  if (d.config_ok === false){
+    cChip.textContent = '⚠ ' + (d.config_error || 'settings มีปัญหา');
+    cChip.style.display = ''; cChip.style.color = 'var(--warn)';
+  } else cChip.style.display = 'none';
   showRemote(d);
   showPower(d);
   showProfileEditor(d);
   drawViz(d);
+  const apLive = $('apLive');
+  if (apLive){
+    const a = d.auto_active || '';
+    if (a.startsWith('game:')) apLive.innerHTML = '◎ กำลังใช้กฎเกม: <b style="color:var(--acc)">' + esc(a.slice(5)) + '</b> (แอป ' + esc(d.auto_exe || '?') + ' ฟื้กซ์)';
+    else if (a.startsWith('restore:')) apLive.innerHTML = '↩ คืนโปรไฟล์หลังเกม: <b>' + esc(a.slice(8)) + '</b>';
+    else if (a.startsWith('sched:')) apLive.innerHTML = '⏰ ตามตารางเวลา: <b>' + esc(a.slice(6)) + '</b>';
+    else apLive.textContent = '';
+  }
   const eng = (d.engines && d.engines.length) ? d.engines : [];
   $('engines').innerHTML = eng.length
     ? eng.map(e => '<span class="chip on">▶ ' + esc(e) + '</span>').join('')
@@ -396,6 +412,7 @@ async function loadNotifyCfg(){
     $('notifyPanel').style.display = '';
     $('nEnabled').checked = n.enabled; $('nEcFail').checked = n.on_ec_fail;
     $('nEcRec').checked = n.on_ec_recover; $('nFan').checked = n.on_fan_stall;
+    $('nAuto').checked = !!n.on_auto_profile;
     $('nThr').value = String(n.temp_threshold || 90);
     $('nDiscord').value = n.discord_webhook || '';
     if (n.telegram_configured) $('nMsg').textContent = '(Telegram: เชื่อมต่ออยู่)';
@@ -406,6 +423,7 @@ function saveNotifyCfg(){
     headers:{'Content-Type':'application/json'}, body: JSON.stringify({
       enabled: $('nEnabled').checked, on_ec_fail: $('nEcFail').checked,
       on_ec_recover: $('nEcRec').checked, on_fan_stall: $('nFan').checked,
+      on_auto_profile: $('nAuto').checked,
       temp_threshold: +$('nThr').value, discord_webhook: $('nDiscord').value.trim()
     })}).then(r => {
       $('nMsg').textContent = r.ok ? 'บันทึกแล้ว ✓' : 'บันทึกไม่สำเร็จ (' + r.status + ')';
@@ -700,6 +718,19 @@ function apLoadIntoSelects(){
     }
   }).catch(() => {});
 }
+$('apCatch').addEventListener('click', () => {
+  fetch('/api/foreground' + location.search, {cache:'no-store'})
+    .then(r => r.json().catch(() => ({}))).then(j => {
+      if (j.exe && j.exe.endsWith('.exe')){
+        $('apExe').value = j.exe;
+        $('apMsg').textContent = 'จับได้: ' + j.exe + ' — เลือกโปรไฟล์แล้วกด + เพิ่มกฎ';
+      } else if (j.exe){
+        $('apMsg').textContent = 'แอปฟื้กซ์ปัจจุบัน (' + j.exe + ') ไม่ใช่ .exe — เช่นแอป UWP/Store ให้พิมพ์ชื่อเอง';
+      } else {
+        $('apMsg').textContent = 'ไม่รู้จักแอปฟื้กซ์ปัจจุบัน (หน้าต่างระบบ/ไม่มีหน้าต่าง?)';
+      }
+    }).catch(() => $('apMsg').textContent = 'เชื่อมต่อ daemon ไม่ได้');
+});
 $('apAdd').addEventListener('click', () => {
   const exe = $('apExe').value.trim().toLowerCase();
   const prof = $('apProf').value;

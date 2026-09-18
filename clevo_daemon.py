@@ -105,8 +105,8 @@ EVENTS_PATH = os.path.join(config.app_base(), "events.jsonl")
 EVENTS_MAX = 5000                       # JSONL lines kept (file is trimmed on rotate)
 
 # event kinds written to events.jsonl
-EV_START, EV_SETTING, EV_ENGINE, EV_NOTIFY, EV_UPDATE = (
-    "start", "setting", "engine", "notify", "update")
+EV_START, EV_SETTING, EV_ENGINE, EV_NOTIFY, EV_UPDATE, EV_AUTO = (
+    "start", "setting", "engine", "notify", "update", "auto_profile")
 
 CSV_HEADERS = ["time", "version", "ec_ok", "cpu_temp", "cpu_rpm", "gpu_rpm",
                "cpu_duty_pct", "gpu_duty_pct", "power", "engines",
@@ -320,6 +320,9 @@ class Daemon:
         # background automations (auto-profile / schedule)
         self._auto_state = ""                # last automation decision (debounce)
         self._auto_lock = threading.Lock()
+        self._auto_last_msg = None           # auto-notify dedup (v1.9.20)
+        self._auto_last_ts = 0.0
+        self._auto_last_exe = ""             # foreground exe seen by the last poll
         self.engines = {}                    # name -> running renderer thread
         self._engine_cmd = None              # ('music'|'ambient'|'temp', 'toggle')
         self._start_time = time.time()
@@ -672,9 +675,10 @@ class Daemon:
 
     # ---------- notifications (Windows toasts) ----------
     def notify(self, kind, title, msg):
-        """kind: ec_fail | ec_recover | temp | engine | fan_stall — respects settings.
-        Every notification that passes the gates also goes to the Discord
-        webhook when one is configured (best-effort, never blocks)."""
+        """kind: ec_fail | ec_recover | temp | engine | fan_stall | auto_profile —
+        respects settings. Every notification that passes the gates also goes
+        to the Discord webhook when one is configured (best-effort, never
+        blocks)."""
         cfg = self.settings.get("notifications")
         if not cfg.get("enabled"):
             return
@@ -683,6 +687,8 @@ class Daemon:
         if kind == "ec_recover" and not cfg.get("on_ec_recover"):
             return
         if kind == "fan_stall" and not cfg.get("on_fan_stall", True):
+            return
+        if kind == "auto_profile" and not cfg.get("on_auto_profile", False):
             return
         log("notify[%s]: %s — %s" % (kind, title, msg))
         elog(EV_NOTIFY, nkind=kind, title=title)
@@ -870,6 +876,8 @@ class Daemon:
                 elif t is not None and t < thr - 5:
                     self._temp_armed = True
                 self._check_fan_stall(entry, thr)
+                entry["auto_active"] = self._auto_state.lstrip("@")
+                entry["config_ok"] = not self.settings.load_info()
             # history (RAM ring + disk, best effort)
             with self._hist_lock:
                 self._history.append(entry)
@@ -1072,10 +1080,31 @@ class Daemon:
         return {"hour": (best + ":00") if best else None,
                 "temp": best_t}
 
+    def _auto_notify(self, title, msg):
+        """Notify + event for an auto-profile switch, deduped: identical
+        messages (same rule/profile) are suppressed for 10 minutes so rapid
+        focus flapping cannot spam toasts/Discord/Telegram."""
+        now = time.time()
+        if msg == getattr(self, "_auto_last_msg", None) \
+                and now - getattr(self, "_auto_last_ts", 0) < 600:
+            return
+        self._auto_last_msg, self._auto_last_ts = msg, now
+        elog(EV_AUTO, title=title)
+        self.notify("auto_profile", title, msg)
+
     def _status_body(self):
         """Current snapshot + recent history for the dashboard/API."""
         snap = self.health_snapshot() or {}
         snap.setdefault("engines", sorted(self.engines.keys()))
+        # config load transparency (v1.9.19 lesson): surface a broken/empty
+        # settings file instead of silently running on defaults
+        snap["config_ok"] = not self.settings.load_info()
+        if not snap["config_ok"]:
+            snap["config_error"] = self.settings.load_info()
+        # live auto-profile state (what rule fired last / what it switched to)
+        with self._auto_lock:
+            snap["auto_active"] = self._auto_state.lstrip("@")
+        snap["auto_exe"] = self._auto_last_exe
         if self.settings.get("dashboard", {}).get("allow_control"):
             snap["allow_control"] = True
             snap["profiles"] = sorted(self.settings.get("profiles", {}))
@@ -1357,6 +1386,13 @@ class Daemon:
                                                     and n.get("telegram_chat_id")),
                     }).encode("utf-8")
                     ctype = "application/json; charset=utf-8"
+                elif path == "/api/foreground":
+                    if not cfg.get("allow_control", False):
+                        self._json_error(403, "control disabled (dashboard.allow_control)")
+                        return
+                    body = json.dumps({"exe": foreground_exe()},
+                                      ensure_ascii=False).encode("utf-8")
+                    ctype = "application/json; charset=utf-8"
                 elif path == "/api/events":
                     body = json.dumps({"events": read_events(100)},
                                       ensure_ascii=False).encode("utf-8")
@@ -1488,6 +1524,7 @@ class Daemon:
                 decision = ""
                 if ap.get("enabled") and ap.get("games"):
                     exe = foreground_exe()
+                    self._auto_last_exe = exe
                     if exe:
                         decision = ap["games"].get(exe, "")
                         if decision:
@@ -1511,6 +1548,14 @@ class Daemon:
                             self._auto_state = decision
                             log("auto-profile (%s) -> %s" % (kind.lstrip("@"), name))
                             self._update_tray()
+                            if kind == "@game":
+                                self._auto_notify(
+                                    "Clevo Backlight: สลับโปรไฟล์อัตโนมัติ",
+                                    "แอป %s → โปรไฟล์ %s" % (self._auto_last_exe or "?", name))
+                            elif kind == "@restore":
+                                self._auto_notify(
+                                    "Clevo Backlight: คืนโปรไฟล์อัตโนมัติ",
+                                    "ออกจากแอปเกม → กลับไปใช้ %s" % name)
                         except Exception as exc:
                             log("auto-profile %s failed: %s" % (decision, exc))
                 elif not decision and self._auto_state:

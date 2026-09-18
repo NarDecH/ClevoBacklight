@@ -96,6 +96,7 @@ DEFAULTS = {
     "hardware": {"profile": "n957tp6", "temp_reg_override": None},
     "notifications": {"enabled": True, "on_ec_fail": True, "on_ec_recover": True,
                       "temp_threshold": 90, "on_fan_stall": True,
+                      "on_auto_profile": False,
                       "discord_webhook": "", "telegram_token": "",
                       "telegram_chat_id": ""},
     "dashboard": {"enabled": True, "bind": "loopback", "token": "",
@@ -104,7 +105,7 @@ DEFAULTS = {
     "updates": {"enabled": False, "repo": "NarDecH/ClevoBacklight", "interval_s": 21600},
 }
 
-APP_VERSION = "1.9.19"
+APP_VERSION = "1.9.20"
 
 MODES = ["custom", "breathe", "cycle", "random", "dance", "tempo", "flash", "wave"]
 
@@ -159,19 +160,33 @@ class Settings:
     def __init__(self, path=CONFIG_PATH):
         self.path = path
         self.lock = threading.RLock()
+        # load transparency (v1.9.19 lesson): _load() records WHY defaults were
+        # substituted in _load_info ("" = clean) — surfaced via load_info() and
+        # /api/status.config_error so silent fallback becomes visible.
+        self._load_info = ""
         self.data = self._load()
 
     # ---- persistence ----
     def _load(self):
         merged = json.loads(json.dumps(DEFAULTS))       # deep copy of defaults
+        info = ""
         try:
             # utf-8-sig: tolerate a UTF-8 BOM (PowerShell Set-Content / Notepad
             # writes one) — plain utf-8 would keep \ufeff in the first key name
             # and silently fall back to defaults (seen live 2026-09-18)
             with open(self.path, "r", encoding="utf-8-sig") as f:
                 user = json.load(f)
-        except (OSError, ValueError):
+        except FileNotFoundError:
+            user = {}                     # fresh install — perfectly normal
+        except ValueError as exc:
             user = {}
+            info = "settings.json อ่านไม่ได้ (%s) — ใช้ค่า default ทั้งหมด" % exc
+        except OSError as exc:
+            user = {}
+            info = "อ่าน settings.json ไม่สำเร็จ (%s) — ใช้ค่า default ทั้งหมด" % exc
+        # note: an empty file / BOM-only file already lands in the ValueError
+        # branch above; a literal {} file counts as the user's choice = clean
+        self._load_info = info
         for key, val in user.items():
             if key == "hotkeys" and isinstance(val, dict):
                 merged["hotkeys"].update(val)
@@ -327,7 +342,8 @@ class Settings:
         out = json.loads(json.dumps(DEFAULTS["notifications"]))
         if not isinstance(raw, dict):
             return out
-        for key in ("enabled", "on_ec_fail", "on_ec_recover", "on_fan_stall"):
+        for key in ("enabled", "on_ec_fail", "on_ec_recover", "on_fan_stall",
+                    "on_auto_profile"):
             out[key] = bool(raw.get(key, out[key]))
         try:
             out["temp_threshold"] = max(60, min(110,
@@ -447,6 +463,10 @@ class Settings:
         return c
 
     # ---- typed accessors ----
+    def load_info(self):
+        """Reason the user settings were substituted, or empty string if clean."""
+        return self._load_info
+
     def get(self, key, default=None):
         with self.lock:
             return self.data.get(key, default)
