@@ -53,6 +53,7 @@ def make_daemon(tmpdir, monkey_overrides=None):
     d._dash_server = None
     d._dash_port = 0
     d.log_lines = []
+    d.auth_guard = clevo_daemon.AuthGuard(d)
     if monkey_overrides:
         for k, v in monkey_overrides.items():
             setattr(d, k, v)

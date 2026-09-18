@@ -2,7 +2,17 @@
 
 รูปแบบอ้างอิง [Keep a Changelog](https://keepachangelog.com/) — เวอร์ชันตามเสถียรภาพของฟีเจอร์ (ไม่มี release สาธารณะ ใช้ภายในเครื่อง)
 
-## [1.9.11] — 2026-09-18
+## [1.9.12](https://github.com/NarDecH/ClevoBacklight/releases/tag/v1.9.12) — 2026-09-18
+
+### Added
+- **เกราะป้องกัน LAN (AuthGuard)** — ทุกความพยายามยิง token ผิดถูกบันทึก IP ลง events.jsonl (`auth_fail`) · ผิด 5 ครั้งใน 60 วิ = **บล็อก IP นั้น 5 นาที** (ตอบ 429 แม้ token ถูก) · toast + Discord/Telegram แจ้ง "มีความพยายามเดา token" (dedup ทุก 10 นาที ไม่สแปม)
+- **การ์ดคุมไฟจากมือถือ** — ปุ่มใหญ่บน Dashboard แสดงสถานะจริง (💡 เปิด / 🌑 ปิด) แตะสลับ + แถวความสว่าง 0–3 · แสดงเมื่อเปิด `allow_control` เท่านั้น
+- `test_auth_guard.py` — logic (limit/block/expiry/notify dedup) + HTTP wiring จริง (401→429→events) · test_all ขั้น [8/9]
+
+### Changed
+- หัวข้อเวอร์ชันที่มี release แล้ว (v1.9.9+) เชื่อมลิงก์ไปหน้า GitHub Releases ตามรูปแบบ Keep a Changelog (ส่วน v1.9.0–v1.9.8 ตรวจแล้วว่าจัดรูปแบบ Added/Changed/Fixed ถูกต้องอยู่แล้ว)
+
+## [1.9.11](https://github.com/NarDecH/ClevoBacklight/releases/tag/v1.9.11) — 2026-09-18
 
 ### Added
 - **Mobile access — เปิด Dashboard จากมือถือ**: แผงใหม่ใน GUI ("Mobile access") ตรวจเงื่อนไข bind=lan + token → สร้าง QR สแกนเปิดเว็บจากมือถือใน Wi-Fi เดียวกัน (มีปุ่มคัดลอกลิงก์ + ปุ่มเปิดไฟร์วอลล์ TCP 8787 ฝั่ง private ผ่าน UAC)
@@ -17,7 +27,7 @@
 ### Fixed
 - smoke_test.py ทน network hiccup (WinError 10053): retry ×2 + fail-soft แทน traceback
 
-## [1.9.10] — 2026-09-17
+## [1.9.10](https://github.com/NarDecH/ClevoBacklight/releases/tag/v1.9.10) — 2026-09-17
 
 ### Added
 - **ปุ่มดาวน์โหลดอัปเดตบน Dashboard** — เมื่อ `/api/update` เจอ release ใหม่กว่า ปุ่ม "⬇ ดาวน์โหลด" ใน chip เวอร์ชัน สั่ง daemon ดึง zip ของ release นั้นไว้ข้างโปรแกรม (background thread, ไม่ auto-install) ผ่าน `POST /api/update/download` — 409 เมื่ออัปเดตแล้ว, event log ทุกคำขอ
@@ -27,7 +37,7 @@
 - **fan read**: EC ของเครื่องนี้ mirror tachometer พัดลมเดียวไปทั้งสองช่อง (พิสูจน์ด้วยการดัมพ์ raw) — `read_fan_once` ยุบช่อง GPU เป็น 0 เมื่อสองช่องเหมือนกันเป๊ะ เพื่อไม่ให้ Dashboard โชว์พัดลมหลอก
 - ตรวจสอบ mapping พัดลมซ้ำตาม DSDT: RPM1@0xD0/RPM2@0xD2 และ DUT1/2 ยังถูกต้อง — ค่าที่เพี้ยนช่วงก่อนคือ transient ของ tachometer ไม่ใช่บั๊กโปรแกรม
 
-## [1.9.9] — 2026-09-17
+## [1.9.9](https://github.com/NarDecH/ClevoBacklight/releases/tag/v1.9.9) — 2026-09-17
 
 ### Added
 - **Music viz สดบน Dashboard** — แผงเอนจินแสดงกราฟแท่ง 3 โซน (ซ้าย/กลาง/ขวา) เต้นตามระดับเสียงที่เอนจินเพลงเห็นจริง (`music_levels` ใน `/api/status`) พร้อม history ~5 วิ · ซ่อนอัตโนมัติเมื่อเอนจินหยุด

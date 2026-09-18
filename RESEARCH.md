@@ -118,6 +118,7 @@
 - **Automation:** game auto-profile (foreground .exe ทุก 5 วิ), day schedule ข้ามเที่ยงคืน, battery-aware (AC/แบต)
 - **Health + Dashboard + Toast** (v1.7–1.8): status.json, history.json, เซิร์ฟเวอร์ localhost:8787, PowerShell WinRT toast
 - **Hardware profiles:** map เซ็นเซอร์ต่อรุ่น (`hardware.profile`) + `--dump-ec`/`--diff` หาเซ็นเซอร์เครื่องใหม่
+- **LAN security (v1.9.12):** AuthGuard — ทุก token ที่ผิดถูก log IP ลง events.jsonl (`auth_fail`) · ผิด 5 ครั้ง/60 วิ = บลอก IP นั้น 300 วิ (ตอบ 429 แม้ token ถูกภายหลัง) · toast แจ้งเจ้าของเครื่อง (dedup 10 นาที) — unit test ครอบทั้ง logic และ HTTP wiring จริง (401→429→events)
 - **Mobile access (v1.9.11):** dashboard `bind: lan` + token บังคับ (fallback loopback ถ้าไม่มี token — กันเว็บเปล่าคุมไฟ) → GUI สร้าง QR จาก LAN IP (UDP trick หา IP ของเกตเวย์) + เปิดไฟร์วอลล์ TCP 8787 ฝั่ง private ผ่าน UAC — มือถือสแกนแล้วเปิด Dashboard พร้อม token ใน URL
 - **Release engineering (v1.9.6–1.9.10):** รีโมตสลับ engine จาก dashboard (music/ambient/temp), ตั้งค่า + ปุ่มทดสอบการแจ้งเตือนบนเว็บ (toast/Discord/Telegram), event log JSONL พร้อม viewer, auto-update checker (opt-in — เช็ค GitHub release ทุก 6 ชม. + ปุ่มดาวน์โหลด), **CI สร้าง release เองทั้ง exe + installer จาก tag** (GitHub Actions + Inno Setup) — พิสูจน์ด้วย v1.9.10 ที่ release/อัปเกรดเครื่องนี้จาก zip ของ release จริง
 
@@ -132,6 +133,7 @@
 | stdout `detach()` กันปิด buffer ร่วมกัน | wrapper stdout ภายใต้ pythonw ต้องระวัง ownership |
 | uninstaller ลบ Scheduled Task ชื่อชน (`ClevoBacklightDaemon` ใช้ทั้ง installer และโปรเจกต์) | แยกชื่อ task installer = `ClevoBacklightAutostart` + **ทดสอบ install→uninstall จริงทุกรอบ** (จับได้ตอนทดสอบ 1.9.7) |
 | `ISCC` รุ่นใหม่ไม่รู้จัก flag `uncheckedonce` | ใช้ flag มาตรฐาน + ทดสอบ `/D` version override กับ ISCC จริงก่อนใส่ CI |
+| battery automation ตายเงียบมาตั้งแต่ v1.6 (thread crash รอบเดียวแล้วหายไป) | struct ของ `GetSystemPowerStatus` ต้องเป็น `ctypes.Structure` — plain class ที่มี `_fields_` ทำ `byref()` throw ทันที · AST audit จับไม่ได้ (runtime type) — ต้องมี unit test เรียก `_power_status()` ตรง ๆ (แก้ + จับได้ v1.9.12) |
 
 ## 9) ช่องทางที่ "ยังเปิด" สำหรับงานต่อ
 
@@ -140,4 +142,4 @@
 - ❌ ~~fan control~~ — **พิสูจน์แล้วว่าทำไม่ได้บนเฟิร์มแวร์นี้** (v1.9.1 จึงเปลี่ยน `clevo_fan.py` เป็น monitor อ่านอย่างเดียว — ดูหัวข้อ "Fan control: proven absent")
 
 ---
-*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.11) · หน้าเว็บฉบับสวย: `docs/research.html`*
+*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.12) · หน้าเว็บฉบับสวย: `docs/research.html`*

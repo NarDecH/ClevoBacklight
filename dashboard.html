@@ -105,6 +105,23 @@
   <div class="k" id="remoteMsg" style="margin-top:6px"></div>
 </div>
 
+<div class="panel" id="powerPanel" style="display:none">
+  <h2>ไฟคีย์บอร์ด — คุมจากมือถือ</h2>
+  <div style="display:flex; gap:16px; align-items:stretch; flex-wrap:wrap">
+    <button class="chip" id="bigPower" style="flex:1 1 220px; padding:26px 10px; font-size:1.25rem; border-radius:14px; border:2px solid var(--line); background:var(--panel2); color:var(--txt); cursor:pointer">⏻ ไม่ทราบสถานะ</button>
+    <div style="flex:1.4 1 260px; display:flex; flex-direction:column; gap:8px; justify-content:center">
+      <div style="display:flex; gap:8px; align-items:center">
+        <span class="k" style="min-width:64px">ความสว่าง</span>
+        <button class="chip" data-bright="0">0</button>
+        <button class="chip" data-bright="1">1</button>
+        <button class="chip" data-bright="2">2</button>
+        <button class="chip" data-bright="3">3</button>
+      </div>
+      <div class="k" id="bigPowerMsg" style="color:var(--mut)">ปุ่มใหญ่ = เปิด/ปิดไฟทั้งแถบ · สถานะอัปเดตทุก 5 วิ</div>
+    </div>
+  </div>
+</div>
+
 <div class="panel">
   <h2>เหตุการณ์ทั้งหมด (events.jsonl) <a class="chip" id="evDl" href="/api/events.jsonl" download="events.jsonl">⬇ ดาวน์โหลด</a></h2>
   <div class="row" style="margin-bottom:8px">
@@ -240,6 +257,7 @@ function render(d){
   } else stEl.innerHTML = '<span class="chip">ยังไม่มีข้อมูลพัดลม</span>';
   $('uptime').textContent = fmtUptime(d.uptime_s);
   showRemote(d);
+  showPower(d);
   drawViz(d);
   const eng = (d.engines && d.engines.length) ? d.engines : [];
   $('engines').innerHTML = eng.length
@@ -444,6 +462,21 @@ function bindRemote(){
   });
 }
 bindRemote();
+
+function showPower(d){
+  const panel = $('powerPanel');
+  if (!d.allow_control){ panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  const on = !!d.power;
+  const b = $('bigPower');
+  b.textContent = on ? '💡 ไฟเปิดอยู่ — แตะเพื่อปิด' : '🌑 ไฟปิดอยู่ — แตะเพื่อเปิด';
+  b.style.borderColor = on ? 'var(--acc)' : 'var(--line)';
+  b.style.color = on ? 'var(--acc)' : 'var(--mut)';
+  b.onclick = () => sendCmd({action:'power', value: !on});
+  document.querySelectorAll('#powerPanel [data-bright]').forEach(x => {
+    x.onclick = () => sendCmd({action:'brightness', value:+x.dataset.bright});
+  });
+}
 
 function showWeekly(){
   fetch('/api/weekly' + location.search, {cache:'no-store'})

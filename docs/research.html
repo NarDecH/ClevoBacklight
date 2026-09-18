@@ -193,6 +193,7 @@
     <tr><td>🌡️ Temp reactive</td><td>EC 0x07 → gradient + alarm blink</td><td class="ok">อ่านจริง 44–51°C ตรง Windows</td></tr>
     <tr><td>🎛️ Profiles/Automation</td><td>game auto-profile · schedule ข้ามเที่ยงคืน · battery-aware</td><td class="ok">smoke test 58 ขั้น PASS</td></tr>
     <tr><td>🩺 Health/Dashboard</td><td>status.json + history.json + localhost:8787 + toast</td><td class="ok">/api/status ตอบจริง ec_ok:true</td></tr>
+    <tr><td>🛡️ LAN security</td><td>AuthGuard — log IP ที่เดา token · 5 ครั้ง/60 วิ = บลอก 300 วิ (429) · toast แจ้งเจ้าของ (dedup)</td><td class="ok">unit test ครอบ logic + HTTP wiring (401→429→events) (v1.9.12)</td></tr>
     <tr><td>📱 Mobile access</td><td>dashboard bind=lan + token บังคับ → QR จาก LAN IP + เปิดไฟร์วอลล์ 8787 ผ่าน UAC</td><td class="ok">สแกนแล้วเปิด Dashboard จากมือถือใน Wi-Fi เดียวกัน (v1.9.11)</td></tr>
     <tr><td>🚀 Release engineering</td><td>รีโมตสลับ engine · ตั้งค่าแจ้งเตือนบนเว็บ (toast/Discord/Telegram) · event log JSONL + viewer · auto-update checker (opt-in) + ปุ่มดาวน์โหลด · <b>CI สร้าง release เองจาก tag</b> (Actions + Inno Setup)</td><td class="ok">v1.9.10 ปล่อยโดย CI · อัปเกรดเครื่องนี้จาก zip ของ release จริง</td></tr>
   </table>
@@ -210,6 +211,7 @@
     <tr><td><code>engine_start</code> ใช้ kb ก่อน connect</td><td>unit test จับได้ก่อนขึ้นเครื่องจริง — เพิ่มชุด mixin tests</td></tr>
     <tr><td>uninstaller ลบ Scheduled Task ชื่อชน (<code>ClevoBacklightDaemon</code> ใช้ทั้ง installer และโปรเจกต์)</td><td>แยกชื่อ task installer = <code>ClevoBacklightAutostart</code> + <b>ทดสอบ install→uninstall จริงทุกรอบ</b> (จับได้ตอนทดสอบ 1.9.7)</td></tr>
     <tr><td>ISCC รุ่นใหม่ไม่รู้จัก flag <code>uncheckedonce</code></td><td>ใช้ flag มาตรฐาน + ทดสอบ <code>/D</code> version override กับ ISCC จริงก่อนใส่ CI</td></tr>
+    <tr><td>battery automation ตายเงียบมาตั้งแต่ v1.6 (thread crash รอบเดียว)</td><td>struct ของ <code>GetSystemPowerStatus</code> ต้องเป็น <code>ctypes.Structure</code> — plain class มี <code>_fields_</code> ทำ <code>byref()</code> throw ทันที · AST audit จับไม่ได้ (runtime type) — ต้องมี unit test เรียก <code>_power_status()</code> ตรง ๆ (แก้ + จับได้ v1.9.12)</td></tr>
   </table>
 </section>
 

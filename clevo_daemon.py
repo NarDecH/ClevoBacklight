@@ -236,11 +236,76 @@ def telegram_post(token, chat_id, title, msg):
         return False
 
 
+class AuthGuard:
+    """Token-guess protection for the dashboard (v1.9.12).
+
+    Every failed auth is logged with the client IP into events.jsonl (kind
+    "auth_fail"); after LIMIT failures within WINDOW seconds the client IP
+    is blocked for BLOCK_S seconds. A toast+notify fires at most once per
+    NOTIFY_EVERY seconds so the user hears about an intruder unobtrusively.
+    """
+
+    WINDOW = 60.0            # seconds
+    LIMIT = 5                # failures per window before the IP gets blocked
+    BLOCK_S = 300.0          # block duration after tripping the limit
+    NOTIFY_EVERY = 600.0     # min spacing between intruder toasts
+
+    def __init__(self, daemon=None):
+        self.daemon = daemon
+        self.lock = threading.Lock()
+        self.fails = {}       # ip -> [timestamps]
+        self.blocked = {}     # ip -> block-until (monotonic time)
+        self._notified_until = 0.0
+
+    def check(self, ip):
+        """False (= refuse before touching tokens) when the IP is blocked."""
+        now = time.monotonic()
+        with self.lock:
+            if now < self.blocked.get(ip, 0.0):
+                return False
+            lst = self.fails.get(ip)
+            if lst:
+                lst[:] = [t for t in lst if now - t < self.WINDOW]
+            return True
+
+    def fail(self, ip):
+        now = time.monotonic()
+        blocked_now = False
+        with self.lock:
+            lst = self.fails.setdefault(ip, [])
+            lst.append(now)
+            lst[:] = [t for t in lst if now - t < self.WINDOW]
+            if len(lst) >= self.LIMIT:
+                self.blocked[ip] = now + self.BLOCK_S
+                self.fails.pop(ip, None)
+                blocked_now = True
+        elog(EV_NOTIFY, nkind="auth_fail", ip=ip)
+        log("auth_fail from %s" % ip)
+        if blocked_now:
+            self._alarm(ip)
+
+    def _alarm(self, ip):
+        with self.lock:
+            now = time.monotonic()
+            if now < self._notified_until:
+                return
+            self._notified_until = now + self.NOTIFY_EVERY
+        if self.daemon is not None:
+            try:
+                self.daemon.notify(
+                    "engine", "⚠️ มีความพยายามเดา token",
+                    "IP %s ส่ง token ผิด %d ครั้งใน %d วิ — บล็อกไว้ %d วินาที (ดู events.jsonl)"
+                    % (ip, self.LIMIT, int(self.WINDOW), int(self.BLOCK_S)))
+            except Exception:
+                pass
+
+
 class Daemon:
     def __init__(self):
         self.settings = config.Settings()
         self.kb = None
         self.lock = threading.Lock()          # serializes EC access
+        self.auth_guard = AuthGuard(self)     # token-guess protection (v1.9.12)
         self.last_apply = 0.0
         self.pending = None                   # debounce payload (reason str)
         self.running = True
@@ -282,7 +347,7 @@ class Daemon:
     def _power_status():
         """(on_battery, life_percent) from GetSystemPowerStatus;
         (None, None) when unknown / no system battery."""
-        class SP:
+        class SP(ctypes.Structure):
             _fields_ = [("ACLineStatus", ctypes.c_ubyte),
                         ("BatteryFlag", ctypes.c_ubyte),
                         ("BatteryLifePercent", ctypes.c_ubyte),
@@ -1020,6 +1085,9 @@ class Daemon:
                 pass
 
             def _authed(self):
+                ip = self.client_address[0]
+                if not daemon.auth_guard.check(ip):
+                    return False
                 if not token:
                     return True
                 q = urllib_parse.urlparse(self.path).query
@@ -1027,6 +1095,7 @@ class Daemon:
                     return True
                 if self.headers.get("X-Auth-Token", "") == token:
                     return True
+                daemon.auth_guard.fail(ip)
                 return False
 
             def do_POST(self):
@@ -1151,8 +1220,13 @@ class Daemon:
             def do_GET(self):
                 path = urllib_parse.urlparse(self.path).path
                 if not self._authed():
-                    body = b'{"error": "unauthorized"}'
-                    self.send_response(401)
+                    ip = self.client_address[0]
+                    if not daemon.auth_guard.check(ip):
+                        body = b'{"error": "too many attempts"}'
+                        self.send_response(429)
+                    else:
+                        body = b'{"error": "unauthorized"}'
+                        self.send_response(401)
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Content-Length", str(len(body)))
                     self.end_headers()

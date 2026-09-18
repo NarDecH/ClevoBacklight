@@ -230,7 +230,8 @@ ClevoBacklight.exe --daemon                                    # tray daemon (�
     <tr><td>Music / Ambient / Temp engines (offline)</td><td><code>test_all.bat</code> [4-6/8]</td><td>✅ PASS ทั้ง 3 ชุด</td></tr>
     <tr><td>Config + daemon mixin + fan (offline)</td><td><code>test_all.bat</code> [7/8]</td><td>✅ PASS — รวม mirror-collapse ของพัดลม</td></tr>
     <tr><td>AST audit (attribute หาย/shadow)</td><td><code>test_all.bat</code> [2/8]</td><td>✅ CLEAN ทุกไฟล์</td></tr>
-    <tr><td>Live smoke test (daemon จริง)</td><td><code>smoke_test.py</code> [8/8]</td><td>✅ 13 เช็ค PASS — auth/API/EC/dashboard ครบ</td></tr>
+    <tr><td>Live smoke test (daemon จริง)</td><td><code>smoke_test.py</code> [9/9]</td><td>✅ 15 เช็ค PASS — auth pair/API/EC/dashboard ครบ</td></tr>
+    <tr><td>Auth guard (rate limit + HTTP wiring)</td><td><code>test_auth_guard.py</code> [8/9]</td><td>✅ 401→429→events + notify dedup</td></tr>
     <tr><td>GUI smoke test (ฮาร์ดแวร์จริง)</td><td><code>--smoke-test</code> (admin)</td><td>✅ 51 ขั้น PASS 0 failures</td></tr>
     <tr><td>CI (GitHub Actions)</td><td>ทุก push ไป master</td><td>✅ test suite + build exe + selftest บน runner</td></tr>
     <tr><td>Music end-to-end (โน้ตจริงออกลำโพง)</td><td><code>ec_music_test.py</code></td><td>✅ 100Hz→BASS, 3kHz→TREBLE, 507 EC writes</td></tr>
