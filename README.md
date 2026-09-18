@@ -236,9 +236,9 @@ python clevo_ec.py --ambient --mix 0.5     # ทางเลือกผ่า�
 
 ## Automation — Game auto-profile & Day schedule
 
-ทำงานเบื้องหลังใน daemon (ตั้งค่าใน GUI สองแผงล่าง หรือแก้ settings.json ตรง ๆ)
+ทำงานเบื้องหลังใน daemon (ตั้งค่าใน GUI สองแผงล่าง, **การ์ด "สลับโปรไฟล์อัตโนมัติตามแอป" บน Dashboard/มือถือ (v1.9.17)** หรือแก้ settings.json ตรง ๆ)
 
-**🎮 Game auto-profile** — ทุก ~5 วิ daemon ดูว่าหน้าต่างโฟกัสเป็นของโปรเซสไหน (อ่านชื่อ .exe แบบ light-weight ไม่แตะ title): ถ้าอยู่ในรายการ → apply โปรไฟล์นั้นทันที; ปิดเกม → กลับไปโปรไฟล์ `restore_profile`
+**🎮 Game auto-profile** — ทุก ~5 วิ daemon ดูว่าหน้าต่างโฟกัสเป็นของโปรเซสไหน (อ่านชื่อ .exe แบบ light-weight ไม่แตะ title): ถ้าอยู่ในรายการ → apply โปรไฟล์นั้นทันที; ปิดเกม → กลับไปโปรไฟล์ `restore_profile` — เพิ่ม/ลบกฎจากหน้าเว็บได้ผ่าน `POST /api/auto_profiles` (ต้องเปิด allow_control; ลบกฎส่งค่า `null`)
 
 ```json
 "auto_profiles": {

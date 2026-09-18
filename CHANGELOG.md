@@ -2,6 +2,19 @@
 
 รูปแบบอ้างอิง [Keep a Changelog](https://keepachangelog.com/) — เวอร์ชันตามเสถียรภาพของฟีเจอร์ (ไม่มี release สาธารณะ ใช้ภายในเครื่อง)
 
+## [1.9.17] — 2026-09-18
+
+### Added
+- **สลับโปรไฟล์อัตโนมัติตามแอปที่ฟื้กซ์** — กำกฎ `exe → โปรไฟล์` ได้จากการ์ดใหม่บน Dashboard (มือถือก็ตั้งได้): เปิดเกม → ไฟเปลี่ยนเองทันที, ปิดแอปแล้วคืนเป็น `restore_profile` ที่ตั้งไว้ (เลือก "ไม่เปลี่ยน" ได้) · ตัวสแกนใช้ `GetForegroundWindow` + `GetModuleBaseNameW` (lightweight, ไม่แตะ title, query-limited เท่านั้น) ทุก `poll_seconds` (2–60 วิ, default 5)
+- API ใหม่ `GET/POST /api/auto_profiles` (เขียนต้องเปิด `allow_control`) ผ่าน `config.upsert_auto_profiles` — **validate ทั้งก้อนแบบ atomic** (exe ต้องลงท้าย .exe + normalize lowercase, โปรไฟล์ต้องมีจริง, ปิดกันชื่อ `password*` ผ่านตัวตั้งชื่อโปรไฟล์เดิม) · ลบกฎส่ง `{"games": {"x.exe": null}}` · ทุกการเขียน log `auto_rule_upsert` ลง events
+- ตัวสลับอยู่ใน `_auto_loop` เดิม (game watcher ตัดสินใจก่อนตารางเวลา — เกมชนะเสมอเมื่อ active) + แสดงชื่อโปรไฟล์ที่ถูกสลับใน log และ tray
+
+### Fixed
+- **ลบกฎอัตโนมัติไม่ได้** — กฎที่ส่งค่า `null` (คำสั่งลบ) โดน validate ปฏิเสธก่อนถึงสาขาลบ (test ใหม่จับได้ตั้งแต่รอบแรก)
+
+### Security
+- กฎใหม่ทุกแถวต้องชี้โปรไฟล์ที่มีอยู่จริง — ไม่มีช่องให้ payload ปลอมสร้างสถานะแปลก
+
 ## [1.9.16] — 2026-09-18
 
 ### Added

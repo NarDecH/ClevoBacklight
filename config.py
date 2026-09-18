@@ -104,7 +104,7 @@ DEFAULTS = {
     "updates": {"enabled": False, "repo": "NarDecH/ClevoBacklight", "interval_s": 21600},
 }
 
-APP_VERSION = "1.9.16"
+APP_VERSION = "1.9.17"
 
 MODES = ["custom", "breathe", "cycle", "random", "dance", "tempo", "flash", "wave"]
 
@@ -585,6 +585,51 @@ def upsert_profile(settings, name, prof):
         profiles[name] = norm
         settings.save()
     return profiles[name]
+
+
+def upsert_auto_profiles(settings, payload):
+    """Merge untrusted auto-profile rules (dashboard/web) into settings.
+
+    payload: {"games": {"game.exe": "profile"}, "restore_profile": "",
+              "enabled": bool, "poll_seconds": int} — rows referencing an
+    unknown profile are dropped (same rule as _validate_auto_profiles);
+    each kept row is logged by the caller. Returns the merged config.
+    """
+    if not isinstance(payload, dict):
+        raise ValueError("auto_profiles payload must be an object")
+    games = payload.get("games")
+    if games is not None and not isinstance(games, dict):
+        raise ValueError("games must be an object of exe -> profile")
+    with settings.lock:
+        profiles = settings.data.get("profiles", {})
+        cur = json.loads(json.dumps(settings.data.get("auto_profiles",
+                                     DEFAULTS["auto_profiles"])))
+        if isinstance(games, dict):
+            for exe, prof in games.items():
+                if not (isinstance(exe, str) and exe.strip().lower().endswith(".exe")):
+                    raise ValueError("rule must be an exe name (e.g. 'game.exe')")
+                key = exe.strip().lower()
+                if prof is None:                       # explicit delete-rule
+                    cur["games"].pop(key, None)
+                    continue
+                if not isinstance(prof, str) or prof not in profiles:
+                    raise ValueError("unknown profile %r for rule %r" % (prof, exe))
+                cur["games"][key] = prof
+        rp = payload.get("restore_profile")
+        if rp is not None:
+            if rp != "" and (not isinstance(rp, str) or rp not in profiles):
+                raise ValueError("unknown restore profile %r" % (rp,))
+            cur["restore_profile"] = rp
+        if "enabled" in payload:
+            cur["enabled"] = bool(payload["enabled"])
+        if "poll_seconds" in payload:
+            try:
+                cur["poll_seconds"] = max(2, min(60, int(payload["poll_seconds"])))
+            except (TypeError, ValueError):
+                raise ValueError("poll_seconds must be an integer 2-60")
+        settings.data["auto_profiles"] = cur
+        settings.save()
+    return cur
 
 
 def _norm_color_static(c):

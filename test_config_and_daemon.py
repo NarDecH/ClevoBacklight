@@ -311,6 +311,93 @@ def test_history_csv(tmp):
     print("history CSV OK")
 
 
+def test_auto_profiles_config_and_api(tmp):
+    """Auto-profile rules: config merge/validation + GET/POST endpoints.
+    Daemon merge must be atomic (bad row rejects the whole POST)."""
+    import urllib.request
+    import urllib.error
+    status_path = os.path.join(tmp, "status.json")
+    hist_path = os.path.join(tmp, "history.json")
+    events_path = os.path.join(tmp, "events.jsonl")
+    old = (clevo_daemon.STATUS_PATH, clevo_daemon.HISTORY_PATH,
+           clevo_daemon.EVENTS_PATH)
+    clevo_daemon.STATUS_PATH = status_path
+    clevo_daemon.HISTORY_PATH = hist_path
+    clevo_daemon.EVENTS_PATH = events_path
+    srv = None
+    try:
+        d = make_daemon(tmp)
+        d.settings.data["dashboard"]["allow_control"] = True
+        d.settings.data["profiles"]["ap-test"] = {
+            "brightness": 3, "colors": ["FF0000", "00FF00", "0000FF"],
+            "mode": "custom", "speed": 4}
+        port = d.start_status_server(port=0)
+        srv = d._dash_server
+        base = "http://127.0.0.1:%d" % port
+
+        # add one rule via POST (payload shape == stored shape)
+        payload = json.dumps({"games": {"GameClient.exe": "ap-test"}}).encode()
+        req = urllib.request.Request(base + "/api/auto_profiles", data=payload,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            j = json.loads(r.read().decode("utf-8"))
+        assert j["ok"] and j["auto_profiles"]["games"]["gameclient.exe"] == "ap-test", j
+
+        # persisted + GET lists it (exe normalized lowercase)
+        assert d.settings.get("auto_profiles")["games"].get("gameclient.exe") == "ap-test"
+        with urllib.request.urlopen(base + "/api/auto_profiles", timeout=5) as r:
+            lst = json.loads(r.read().decode("utf-8"))
+        assert lst["games"].get("gameclient.exe") == "ap-test", lst
+
+        # unknown profile in a rule -> 400, nothing persisted (atomic)
+        bad = json.dumps({"games": {"other.exe": "no-such-profile"}}).encode()
+        req2 = urllib.request.Request(base + "/api/auto_profiles", data=bad,
+                                      headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req2, timeout=5)
+            raise AssertionError("unknown profile must be rejected 400")
+        except urllib.error.HTTPError as e:
+            assert e.code == 400, e.code
+        assert "other.exe" not in d.settings.get("auto_profiles")["games"]
+
+        # rule for a non-exe string -> 400
+        bad2 = json.dumps({"games": {"notanexe": "ap-test"}}).encode()
+        req3 = urllib.request.Request(base + "/api/auto_profiles", data=bad2,
+                                      headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req3, timeout=5)
+            raise AssertionError("non-exe rule must be rejected 400")
+        except urllib.error.HTTPError as e:
+            assert e.code == 400, e.code
+
+        # delete a rule with null value; enabled/restore round-trip
+        dele = json.dumps({"games": {"GameClient.EXE": None},
+                           "enabled": True, "restore_profile": "ap-test",
+                           "poll_seconds": 7}).encode()
+        req4 = urllib.request.Request(base + "/api/auto_profiles", data=dele,
+                                      headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req4, timeout=5) as r:
+            j4 = json.loads(r.read().decode("utf-8"))
+        ap = j4["auto_profiles"]
+        assert ap["games"] == {} and ap["enabled"] is True, ap
+        assert ap["restore_profile"] == "ap-test" and ap["poll_seconds"] == 7, ap
+
+        # control off -> 403 on POST
+        d.settings.data["dashboard"]["allow_control"] = False
+        req5 = urllib.request.Request(base + "/api/auto_profiles", data=payload,
+                                      headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req5, timeout=5)
+            raise AssertionError("control off must be rejected 403")
+        except urllib.error.HTTPError as e:
+            assert e.code == 403, e.code
+    finally:
+        if srv is not None:
+            srv.shutdown()
+        clevo_daemon.STATUS_PATH, clevo_daemon.HISTORY_PATH, \
+            clevo_daemon.EVENTS_PATH = old
+
+
 def test_profiles_endpoint_and_upsert(tmp):
     """POST /api/profiles creates/updates a profile (validated); GET lists.
     Static PWA files (manifest/sw/icons) must be served."""
@@ -972,6 +1059,7 @@ def main():
     test_update_download_endpoint(tmp)
     test_dashboard_history_csv_endpoint(tmp)
     test_profiles_endpoint_and_upsert(tmp)
+    test_auto_profiles_config_and_api(tmp)
     test_dashboard_handler(tmp)
     test_dashboard_token_and_lan_fallback(tmp)
     test_fan_controller()

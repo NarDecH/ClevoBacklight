@@ -26,6 +26,7 @@
   canvas{width:100%; height:110px; display:block}
   .row{display:flex; gap:10px; flex-wrap:wrap; margin-top:6px}
   .chip{background:var(--panel2); border:1px solid var(--line); border-radius:20px; padding:4px 12px; font-size:.78rem}
+  .tag{display:inline-block; background:var(--panel2); border:1px solid var(--line); border-radius:20px; padding:4px 12px; font-size:.8rem; margin:2px 2px 2px 0}
   .chip.on{border-color:var(--acc); color:var(--acc)}
   .chip.bad{border-color:var(--bad); color:var(--bad)}
   a.chip{text-decoration:none}
@@ -159,6 +160,19 @@
   <table id="dailyTable"><tr><th>วันที่</th><th>อุณหภูมิเฉลี่ย/สูงสุด</th><th>RPM เฉลี่ย/สูงสุด</th><th>EC fail</th></tr></table>
 </div>
 
+<div class="panel" id="autoPanel" style="display:none">
+  <h2>สลับโปรไฟล์อัตโนมัติตามแอป (เปิดเกม → ไฟเปลี่ยนเอง)</h2>
+  <div class="row" style="flex-wrap:wrap; gap:10px; align-items:flex-end">
+    <label class="k">โปรแกรม (.exe)<br><input id="apExe" placeholder="cyberpunk2077.exe" style="background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:6px; padding:6px 8px; width:170px"></label>
+    <label class="k">ใช้โปรไฟล์<br><select id="apProf" style="background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px"></select></label>
+    <button id="apAdd" style="background:var(--panel2); color:var(--acc); border:1px solid var(--line); border-radius:6px; padding:7px 12px; cursor:pointer">+ เพิ่มกฎ</button>
+    <label class="k">เมื่อปิดแอป กลับไปใช้<br><select id="apRestore" style="background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px"><option value="">— ไม่เปลี่ยน —</option></select></label>
+    <label class="k"><input type="checkbox" id="apOn"> เปิดใช้งาน</label>
+    <button id="apSave" style="background:var(--panel2); color:var(--acc); border:1px solid var(--line); border-radius:6px; padding:7px 12px; cursor:pointer">บันทึก</button>
+  </div>
+  <div id="apList" style="margin-top:8px; font-size:.9rem"></div>
+  <div id="apMsg" style="margin-top:6px; color:var(--mut); font-size:.85rem"></div>
+</div>
 <div class="panel" id="profileEditor" style="display:none">
   <h2>แต่งโปรไฟล์สี (สร้าง/แก้ได้จากมือถือ — ต้องเปิด allow_control)</h2>
   <div class="row" style="flex-wrap:wrap; gap:10px; align-items:flex-end">
@@ -515,9 +529,10 @@ bindRemote();
 
 /* ---- profile editor (v1.9.15, allow_control only) ---- */
 function showProfileEditor(d){
-  const p = $('profileEditor');
-  if (!d.allow_control){ p.style.display = 'none'; return; }
-  p.style.display = '';
+  const p = $('profileEditor'), ap = $('autoPanel');
+  if (!d.allow_control){ p.style.display = 'none'; ap.style.display = 'none'; return; }
+  p.style.display = ''; ap.style.display = '';
+  apLoadIntoSelects(); apFetch();
   fetch('/api/profiles' + location.search).then(r => r.json()).then(j => {
     const dl = $('peNames'); dl.innerHTML = '';
     Object.keys(j.profiles || {}).forEach(n => {
@@ -645,6 +660,83 @@ $('peImportFile').onchange = async () => {
   msg.textContent = 'นำเข้า ' + ok + ' โปรไฟล์' + (bad.length ? ' · ข้าม: ' + bad.join(', ') : '') + ' ✓';
   showProfileEditor({allow_control: true});
 };
+
+/* ---- auto profile switching (v1.9.17): rules keyed by foreground .exe ----
+   GET /api/auto_profiles on refresh; POST merges rules (server validates
+   exe suffix + profile existence; payload shape is the stored shape). */
+function apFetch(){
+  fetch('/api/auto_profiles' + location.search).then(r => r.json()).then(j => {
+    apRender(j);
+  }).catch(() => {});
+}
+function apRender(j){
+  const list = $('apList');
+  const games = j.games || {};
+  const names = Object.keys(games);
+  if (!names.length){
+    list.textContent = 'ยังไม่มีกฎ — เพิ่มเช่น cyberpunk2077.exe → gaming';
+  } else {
+    list.innerHTML = names.map(exe =>
+      '<span class="tag" data-exe="' + exe + '">' + exe + ' → <b>' + games[exe] +
+      '</b> <a href="#" data-del="' + exe + '" style="color:var(--bad); text-decoration:none"> ✕</a></span>').join(' ');
+  }
+  $('apOn').checked = !!j.enabled;
+}
+function apLoadIntoSelects(){
+  fetch('/api/profiles' + location.search).then(r => r.json()).then(j => {
+    const profs = Object.keys(j.profiles || {});
+    for (const id of ['apProf', 'apRestore']){
+      const sel = $(id), cur = sel.value;
+      sel.innerHTML = '';
+      if (id === 'apRestore'){
+        const none = document.createElement('option'); none.value = '';
+        none.textContent = '— ไม่เปลี่ยน —'; sel.appendChild(none);
+      }
+      profs.forEach(n => {
+        const o = document.createElement('option'); o.value = n; o.textContent = n;
+        sel.appendChild(o);
+      });
+      if (cur) sel.value = cur;
+    }
+  }).catch(() => {});
+}
+$('apAdd').addEventListener('click', () => {
+  const exe = $('apExe').value.trim().toLowerCase();
+  const prof = $('apProf').value;
+  if (!exe.endsWith('.exe')){ $('apMsg').textContent = 'ต้องระบุชื่อ .exe เช่น cyberpunk2077.exe'; return; }
+  if (!prof){ $('apMsg').textContent = 'เลือกโปรไฟล์ก่อน'; return; }
+  fetch('/api/auto_profiles' + location.search, {method:'POST', cache:'no-store',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({games:{[exe]: prof}})})
+    .then(r => r.json().catch(() => ({}))).then(j => {
+      if (j.ok){
+        $('apExe').value = '';
+        $('apMsg').textContent = 'เพิ่มกฎ ' + exe + ' → ' + prof + ' ✓';
+        apFetch();
+      } else $('apMsg').textContent = j.error || ('ผิดพลาด ' + r.status);
+    }).catch(() => $('apMsg').textContent = 'เชื่อมต่อ daemon ไม่ได้');
+});
+$('apList').addEventListener('click', ev => {
+  const exe = ev.target && ev.target.dataset && ev.target.dataset.del;
+  if (!exe) return;
+  ev.preventDefault();
+  fetch('/api/auto_profiles' + location.search, {method:'POST', cache:'no-store',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({games:{[exe]: null}})})
+    .then(r => r.json()).then(j => { if (j.ok){ $('apMsg').textContent = 'ลบกฎ ' + exe + ' แล้ว'; apFetch(); } })
+    .catch(() => {});
+});
+$('apSave').addEventListener('click', () => {
+  const payload = {enabled: $('apOn').checked};
+  const rp = $('apRestore').value;
+  if (rp) payload.restore_profile = rp;
+  fetch('/api/auto_profiles' + location.search, {method:'POST', cache:'no-store',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})
+    .then(r => r.json().catch(() => ({}))).then(j => {
+      $('apMsg').textContent = j.ok ? 'บันทึกแล้ว ✓' : (j.error || 'ผิดพลาด');
+      if (j.ok) apFetch();
+    }).catch(() => $('apMsg').textContent = 'เชื่อมต่อ daemon ไม่ได้');
+});
 
 /* ---- offline mode (v1.9.16): cached last state + command queue ----
    /api/status is cached by the SW (cache-first with TTL) so the last live

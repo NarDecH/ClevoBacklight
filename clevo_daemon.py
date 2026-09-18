@@ -1234,6 +1234,33 @@ class Daemon:
                     self.end_headers()
                     self.wfile.write(body)
                     return
+                if path == "/api/auto_profiles":
+                    # add/update foreground-app rules (auto profile switching)
+                    if not cfg.get("allow_control", False):
+                        self._json_error(403, "control disabled (dashboard.allow_control)")
+                        return
+                    try:
+                        length = int(self.headers.get("Content-Length", 0) or 0)
+                        payload = json.loads(self.rfile.read(length) or b"{}")
+                    except ValueError:
+                        self._json_error(400, "bad json")
+                        return
+                    try:
+                        merged = config.upsert_auto_profiles(daemon.settings, payload)
+                    except ValueError as exc:
+                        self._json_error(400, str(exc))
+                        return
+                    for exe, prof in (payload.get("games") or {}).items():
+                        elog(EV_NOTIFY, nkind="auto_rule_upsert", exe=exe,
+                             profile=prof)
+                    body = json.dumps({"ok": True, "auto_profiles": merged},
+                                      ensure_ascii=False).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 if path != "/api/cmd":
                     self._json_error(404, "not found")
                     return
@@ -1351,6 +1378,10 @@ class Daemon:
                     self.send_header("Content-Length", str(len(body)))
                     self.end_headers()
                     self.wfile.write(body)
+                elif path == "/api/auto_profiles":
+                    ap = daemon.settings.get("auto_profiles", {})
+                    body = json.dumps(ap, ensure_ascii=False).encode("utf-8")
+                    ctype = "application/json; charset=utf-8"
                 elif path == "/api/update":
                     try:
                         body = json.dumps(daemon.check_for_update(),

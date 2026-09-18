@@ -255,7 +255,21 @@
   <p class="muted">→ ข้อจำกัดที่ยอมรับ: สถานะออฟไลน์เก่าสุด 15 วิ (มีแบนเนอร์ชัดเจน) · คิวคำสั่งไม่มี transaction guarantee — ทุก action set-absolute (idempotent ในทางปฏิบัติ) จึงกดทับทันทีถ้าเปลี่ยนใจ</p>
 </section>
 
-<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.16) · ความปลอดภัย: SECURITY.md</footer>
+<section id="s12">
+  <h2><span class="no">12</span> Auto-profile ตามแอปฟื้กซ์ (v1.9.17)</h2>
+  <p>เปิดเกม → ไฟเปลี่ยนโปรไฟล์เอง · ปิดแอป → คืนโปรไฟล์ restore (ถ้าตั้ง) ตัวสแกนถาม Windows ถึงแอปฟื้กซ์ทุก poll_seconds แล้วตัดสินใจเป็น state machine เดียว (decision เปลี่ยน = apply ครั้งเดียว — debounce ฟรี)</p>
+  <table>
+    <tr><th>ด้าน</th><th>การตัดสินใจ</th><th>เหตุผล</th></tr>
+    <tr><td>ตรวจแอปฟื้กซ์</td><td><code>GetForegroundWindow</code> + <code>GetModuleBaseNameW</code> (QUERY_LIMITED) → ชื่อ .exe lowercase</td><td>lightweight · ไม่ต้องสิทธิ์พิเศษ · <b>ไม่แตะ window title</b> (กันเหนียว anti-cheat)</td></tr>
+    <tr><td>ลำดับความสำคัญ</td><td>game watcher ชนะ schedule เวลา</td><td>เปิดเกมตีสองก็ควรได้โปรไฟล์เกม</td></tr>
+    <tr><td>API</td><td><code>GET/POST /api/auto_profiles</code> · ลบกฎส่งค่า <code>null</code></td><td>แบบเดียวกับ /api/profiles: allow_control + validate atomic + events log</td></tr>
+    <tr><td>Validation</td><td>exe ลงท้าย .exe + lowercase · profile ต้องมีจริง · ล้มทั้ง POST ถ้าพัง</td><td>atomic — ไม่มีสถานะครึ่ง ๆ กลาง ๆ</td></tr>
+  </table>
+  <p><b>บั๊กที่ test จับรอบแรก:</b> คำสั่งลบกฎ (ค่า <code>null</code>) โดน validate "profile ต้องมีจริง" ปฏิเสธก่อนถึงสาขาลบ — บทเรียน: <i>"ลบ" ต้องเป็น first-class case ใน validator</i></p>
+  <p><b>ข้อจำกัดที่ยอมรับ:</b> รู้จำแอปจากชื่อ .exe เท่านั้น · UWP บางตัวรายงาน exe ตัวกลาง — อนาคต: ปุ่ม "จับแอปฟื้กซ์ปัจจุบัน"</p>
+</section>
+
+<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.17) · ความปลอดภัย: SECURITY.md</footer>
 </div>
 </body>
 </html>
