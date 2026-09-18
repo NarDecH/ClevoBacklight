@@ -134,6 +134,8 @@
 | uninstaller ลบ Scheduled Task ชื่อชน (`ClevoBacklightDaemon` ใช้ทั้ง installer และโปรเจกต์) | แยกชื่อ task installer = `ClevoBacklightAutostart` + **ทดสอบ install→uninstall จริงทุกรอบ** (จับได้ตอนทดสอบ 1.9.7) |
 | `ISCC` รุ่นใหม่ไม่รู้จัก flag `uncheckedonce` | ใช้ flag มาตรฐาน + ทดสอบ `/D` version override กับ ISCC จริงก่อนใส่ CI |
 | battery automation ตายเงียบมาตั้งแต่ v1.6 (thread crash รอบเดียวแล้วหายไป) | struct ของ `GetSystemPowerStatus` ต้องเป็น `ctypes.Structure` — plain class ที่มี `_fields_` ทำ `byref()` throw ทันที · AST audit จับไม่ได้ (runtime type) — ต้องมี unit test เรียก `_power_status()` ตรง ๆ (แก้ + จับได้ v1.9.12) |
+| **remote control deadlock** (v1.9.12, จับตัวด้วย py-spy) | ห้ามเรียก `connect()` ขณะถือ `self.lock` — `threading.Lock` เป็น non-reentrant, `connect()` ขอ lock เดิมซ้ำ = ค้างถาวร + ลาก health/watchdog/POST แข็งตามทั้งโปรเซส · py-spy dump บน daemon จริงคือเครื่องมือชี้ขาด (ทุก thread ยืนที่ `connect` บรรทัดเดียวกัน) |
+| battery loop re-apply ทุก 10 วิบน AC (v1.9.12) | เงื่อนไข dedup ใช้ `on is False` ผิดขั้ว (`on` = ใช้แบต) → `level_changed` True ตลอดบน AC = เขียน EC ไม่จำเป็น + แย่ง EC lock — dedup ต้องทดสอบทั้งสองขั้วของตัวแปรสถานะ |
 
 ## 9) ช่องทางที่ "ยังเปิด" สำหรับงานต่อ
 
@@ -142,4 +144,4 @@
 - ❌ ~~fan control~~ — **พิสูจน์แล้วว่าทำไม่ได้บนเฟิร์มแวร์นี้** (v1.9.1 จึงเปลี่ยน `clevo_fan.py` เป็น monitor อ่านอย่างเดียว — ดูหัวข้อ "Fan control: proven absent")
 
 ---
-*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.12) · หน้าเว็บฉบับสวย: `docs/research.html`*
+*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.13) · หน้าเว็บฉบับสวย: `docs/research.html`*

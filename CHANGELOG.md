@@ -2,6 +2,14 @@
 
 รูปแบบอ้างอิง [Keep a Changelog](https://keepachangelog.com/) — เวอร์ชันตามเสถียรภาพของฟีเจอร์ (ไม่มี release สาธารณะ ใช้ภายในเครื่อง)
 
+## [1.9.13] — 2026-09-18
+
+### Fixed
+- **Deadlock ของ remote control (จับตัวได้ด้วย py-spy)** — `remote_command` ถือ `self.lock` แล้วเรียก `connect()` ซึ่งขอ lock เดียวกันซ้ำ (non-reentrant) → thread ผู้เรียกค้างถาวร และ health/watchdog/POST ถัดไปแข็งตามทั้งหมด (สังเกตจาก status.json หยุดอัปเดต + POST /api/cmd hang) — แก้โดยเรียก `connect()` ก่อนเข้า lock พร้อม comment อธิบาย + สแกนหา pattern ซ้ำทั้งไฟล์ (ไม่พบจุดอื่น)
+- **battery loop re-apply ทุก 10 วิเมื่ออยู่บน AC** — เงื่อนไข `level_changed` ใช้ `on is False` (แปลว่า "บน AC") ทำให้ True ตลอด → เขียน EC ไม่จำเป็น + แย่ง EC lock — แก้เป็น `on is True` (dimming ตามระดับแบตใช้ตอนถอดปลั๊กเท่านั้น)
+- **Dashboard server → `ThreadingHTTPServer`** — single-thread เดิมทำให้ request หนึ่งค้างแล้วบังคิวทั้งเซิร์ฟเวอร์
+- POST `/api/cmd` ที่ action ไม่รู้จักตอบ **400** แทน 500 (ValueError = คำขอผิด) — smoke test ครอบเคสนี้ตอน allow_control เปิด
+
 ## [1.9.12](https://github.com/NarDecH/ClevoBacklight/releases/tag/v1.9.12) — 2026-09-18
 
 ### Added

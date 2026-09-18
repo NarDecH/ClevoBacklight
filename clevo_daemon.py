@@ -28,7 +28,7 @@ import sys
 import threading
 import time
 from ctypes import wintypes
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import urllib.request
 from urllib import parse as urllib_parse
 from xml.sax.saxutils import escape
@@ -377,7 +377,10 @@ class Daemon:
         last_level = None
         while self.running:
             on, pct = self._power_status()
-            level_changed = (on is False and pct is not None and pct != last_level)
+            # `on` here means "on battery" — level-aware dimming applies
+            # only while unplugged; on AC this must stay False or the loop
+            # re-applies the AC state every tick (EC churn + lock contention)
+            level_changed = (on is True and pct is not None and pct != last_level)
             if on is not None and (on != last or level_changed):
                 try:
                     if on and last_level is None:
@@ -398,6 +401,9 @@ class Daemon:
             last = on
             last_level = pct if on else None
             time.sleep(10)
+            # NOTE: level_changed is computed from the ON-BATTERY pct only;
+            # on AC it must stay False or the loop re-applies the AC state
+            # every tick (EC churn + lock contention every 10 s)
 
     # ---------- updates (GitHub releases, opt-in) ----------
     def check_for_update(self, repo=None):
@@ -916,8 +922,12 @@ class Daemon:
             self._engine_cmd_set(name)
             return {"ok": True, "action": action, "name": name,
                     "queued": True}
+        # self.lock is NON-REENTRANT: connect() takes it internally, so it
+        # MUST be called before entering `with self.lock` here — nesting them
+        # deadlocks the calling thread and freezes every other EC user
+        # (health loop, watchdog, further /api/cmd POSTs) forever.
+        kb = self.connect()
         with self.lock:
-            kb = self.connect()
             if action == "power":
                 on = bool(payload.get("value"))
                 kb.power_on(on)
@@ -1199,6 +1209,9 @@ class Daemon:
                     return
                 try:
                     result = daemon.remote_command(payload)
+                except ValueError as exc:      # unknown action/parameters
+                    self._json_error(400, str(exc))
+                    return
                 except Exception as exc:
                     self._json_error(500, str(exc))
                     return
@@ -1319,7 +1332,7 @@ class Daemon:
         ports = (port,) + tuple(range(port + 1, port + 20)) if port else (port,)
         for p in ports:
             try:
-                httpd = HTTPServer((host, p), _Handler)
+                httpd = ThreadingHTTPServer((host, p), _Handler)
             except OSError:
                 continue
             self._dash_server = httpd
