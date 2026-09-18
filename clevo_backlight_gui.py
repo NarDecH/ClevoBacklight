@@ -14,6 +14,8 @@ Features:
   * music-reactive mode (WASAPI loopback -> bass/mid/treble zones)
 """
 import os
+import socket
+import subprocess
 import sys, io
 if sys.stdout is not None:      # pythonw has no stdout
     try:
@@ -586,6 +588,72 @@ class App:
         self.settings.set("dashboard", dash)
         self._set_status("บันทึก dashboard แล้ว — daemon ใช้ค่าใหม่ตอนรีสตาร์ท (Ctrl+Alt+K → tray เริ่มใหม่)")
 
+    # --- mobile access (LAN + QR) ----------------------------------------
+
+    def _mobile_url(self):
+        """http://<LAN-IP>:8787/?token=… or None with a reason logged."""
+        dash = self.settings.get("dashboard")
+        if dash.get("bind") != "lan":
+            self._set_status("ตั้ง bind = lan ในแผง Dashboard ก่อน (แล้วบันทึก + รีสตาร์ท daemon)")
+            return None
+        if not dash.get("token"):
+            self._set_status("ตั้ง token ในแผง Dashboard ก่อน — LAN ไม่มี token ไม่ปลอดภัย")
+            return None
+        ip = ""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+        except OSError:
+            self._set_status("หา IP ใน LAN ไม่ได้ — เช็คว่าเชื่อมเครือข่ายอยู่")
+            return None
+        return f"http://{ip}:8787/?token={dash['token']}"
+
+    def _mobile_qr(self):
+        url = self._mobile_url()
+        if not url:
+            return
+        try:
+            import qrcode
+        except ImportError:
+            messagebox.showerror(APP_TITLE, "ยังไม่ได้ติดตั้ง qrcode\n\nรัน: pip install qrcode")
+            return
+        import tkinter.image as tkimg
+        img = qrcode.make(url, box_size=8, border=2)
+        self._mobile_qr_window = tk.Toplevel()
+        self._mobile_qr_window.title("Clevo Dashboard — สแกนด้วยมือถือ")
+        self._mobile_qr_window.attributes("-topmost", True)
+        tk.Label(self._mobile_qr_window,
+                 text="สแกนด้วยกล้องมือถือ (ต้องอยู่ Wi-Fi เดียวกัน)",
+                 font=LABEL_FONT).pack(padx=16, pady=(12, 4))
+        ph = tk.Label(self._mobile_qr_window)
+        ph._qr_png = img  # keep a ref alive with the window
+        ph.pack(padx=16, pady=6)
+        ph.configure(image=tkimg.PhotoImage(img))
+        tk.Label(self._mobile_qr_window, text=url, fg="#0066cc").pack(padx=16, pady=(2, 12))
+        self._set_status("QR พร้อม — สแกนเพื่อเปิด Dashboard จากมือถือ")
+
+    def _mobile_copy_link(self):
+        url = self._mobile_url()
+        if not url:
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(url)
+        self._set_status("คัดลอกลิงก์มือถือแล้ว — วางในเบราว์เซอร์ของมือถือ (แชท/อีเมลหาตัวเอง)")
+
+    def _mobile_firewall(self):
+        """Open TCP 8787 on the private profile via elevated PowerShell."""
+        cmd = ('Start-Process powershell -Verb RunAs -Wait -ArgumentList '
+               "'-NoProfile -Command "
+               "New-NetFirewallRule -DisplayName ClevoBacklight -Direction Inbound "
+               "-Protocol TCP -LocalPort 8787 -Action Allow -Profile Private''")
+        try:
+            subprocess.Popen(["powershell", "-NoProfile", "-Command", cmd])
+            self._set_status("หน้าต่าง UAC เปิดแล้ว — อนุมัติเพื่อเปิดพอร์ต 8787 ฝั่ง private network")
+        except OSError as exc:
+            messagebox.showerror(APP_TITLE, f"เรียก PowerShell ไม่สำเร็จ: {exc}")
+
     def _save_engine_defaults(self):
         """Persist the renderer defaults the daemon uses for hotkey toggles."""
         eng = self.settings.get("engines")
@@ -937,6 +1005,20 @@ class App:
         tk.Checkbutton(df, text="อนุญาตให้ควบคุมไฟจากหน้าเว็บ/มือถือ (ปุ่ม power/brightness/profile — POST /api/cmd)",
                        variable=self.dash_ctrl_var,
                        command=self._save_dashboard).pack(fill="x", padx=6)
+
+        mf = tk.LabelFrame(host, text="Mobile access (เปิด Dashboard จากมือถือในบ้าน — QR + token)", fg="#444")
+        mf.pack(fill="x", **pad)
+        mrow = tk.Frame(mf)
+        mrow.pack(fill="x")
+        tk.Button(mrow, text="สร้าง QR สำหรับมือถือ",
+                  command=self._mobile_qr).pack(side="left", padx=4)
+        tk.Button(mrow, text="เปิดไฟร์วอลล์ให้พอร์ต 8787 (ต้องใช้ admin)",
+                  command=self._mobile_firewall).pack(side="left", padx=4)
+        tk.Button(mrow, text="คัดลอกลิงก์",
+                  command=self._mobile_copy_link).pack(side="left", padx=4)
+        tk.Label(mf, text="เงื่อนไข: Dashboard ต้องเปิด + bind=lan + มี token (ตั้งในแผง Dashboard ด้านบน) — มือถือต้องอยู่ Wi-Fi เดียวกัน · QR มี token ฝังในลิงก์ อย่าแชร์ให้คนนอกบ้าน",
+                 font=LABEL_FONT, fg="#888").pack(fill="x", padx=6)
+        self._mobile_qr_window = None
 
         nf = tk.LabelFrame(host, text="Notifications (toast จาก daemon — ทุกอันปิด/เปิดได้)", fg="#444")
         nf.pack(fill="x", **pad)

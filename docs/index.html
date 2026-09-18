@@ -105,6 +105,11 @@
     <div class="card"><h3>📊 Live Dashboard <span class="em">(ใหม่ v1.8)</span></h3><p class="muted">daemon เปิดเว็บที่ <code>127.0.0.1:8787</code> — สถานะสด + กราฟอุณหภูมิย้อนหลัง + เอนจินที่รัน (เปิดจาก tray ได้)</p></div>
     <div class="card"><h3>🔔 Toast + 🧩 Hardware profiles <span class="em">(ใหม่ v1.8)</span></h3><p class="muted">แจ้งเตือน Windows เมื่อ EC ล่ม/อุณหภูมิเกิน/เอนจินหยุดเอง · map เซ็นเซอร์ต่อรุ่น + <code>--dump-ec --diff</code> สำรวจเครื่องใหม่</p></div>
     <div class="card"><h3>🎮 Game auto-profile + ⏰ Schedule</h3><p class="muted">เปิดเกม (foreground .exe) → สลับโปรไฟล์ทันที ปิดเกมกลับเอง · เปลี่ยนโปรไฟล์ตามเวลา ข้ามเที่ยงคืนได้</p></div>
+    <div class="card"><h3>🎛️ รีโมตสลับโหมดเรียลไทม์ <span class="em">(ใหม่ v1.9.6)</span></h3><p class="muted">ปุ่ม music/ambient/temp บน Dashboard สั่ง daemon เข้าคิวเดียวกับ hotkey — เปลี่ยนโหมดจากมือถือได้ ปุ่มสลับ ▶/■ ตามสถานะจริง</p></div>
+    <div class="card"><h3>💬 Discord + ✈️ Telegram <span class="em">(ใหม่ v1.9.6–1.9.7)</span></h3><p class="muted">แจ้งเตือนทุกชนิด (EC ล่ม/กลับมา, CPU ร้อน, พัดลมหยุด) + สรุปรายวันอัตโนมัติเข้าแชท — ตั้งค่าใน GUI หรือบนหน้าเว็บพร้อมปุ่มส่งข้อความทดสอบ</p></div>
+    <div class="card"><h3>🗂️ Event log + 🩺 เกรดสุขภาพ <span class="em">(ใหม่ v1.9.8–1.9.7)</span></h3><p class="muted">เหตุการณ์สำคัญทั้งหมดบันทึก JSONL (start/setting/engine/notify/update) ดู/filter/ดาวน์โหลดจากหน้าเว็บได้ · เกรดสุขภาพเครื่อง A–F สรุปจาก 30 วันล่าสุด</p></div>
+    <div class="card"><h3>🔄 Auto-update <span class="em">(ใหม่ v1.9.8–1.9.10)</span></h3><p class="muted">เช็ค GitHub release ทุก 6 ชม. (opt-in) เจอเวอร์ชันใหม่ → toast แจ้ง + ปุ่มดาวน์โหลดบน Dashboard — CI สร้าง release เองทั้ง zip + installer จาก tag</p></div>
+    <div class="card"><h3>📱 เปิดจากมือถือ <span class="em">(ใหม่ v1.9.11)</span></h3><p class="muted">โหมด LAN bind + token บังคับ — เปิด Dashboard จากมือถือในบ้านผ่าน QR (แผง Mobile access ใน GUI)</p></div>
     <div class="card"><h3>🔁 Daemon + hotkeys + tray</h3><p class="muted">คืนค่าไฟหลัง boot/sleep/hotplug (ยืนยันจาก daemon.log แล้ว), global hotkeys ทุกปุ่ม, tray icon เปลี่ยนสีตามไฟจริง, single-instance guard</p></div>
   </div>
 </section>
@@ -214,27 +219,38 @@ ClevoBacklight.exe --daemon                                    # tray daemon (�
   <p class="muted">ถอดรหัสจาก DSDT ของเครื่อง (case 0x67 ของ SCMD) — mailbox ที่ EC RAM <b>0xF8–0xFC</b> (FCMD/FDAT/FBUF/FBF1/FBF2) ผ่านพอร์ต ITE 0x62/0x66 ด้วยไดรเวอร์ WinRing0x64 (ลงนาม v1.2.0.5) — รายละเอียดเต็มใน README.md</p>
   <div class="flow">ธุรกรรมถูกคุม 3 ชั้น: <b>mutex ข้ามโปรเซส</b> + <b>retry ×3 (backoff)</b> + <b>drain OBF</b>
 หลัง EC ประมวลผล FCMD จะเคลียร์กลับ 0x00 เอง = สัญญาณคำสั่งถูกรับ (ยืนยันบนเครื่องจริง)
-อุณหภูมิ: EC 0x07 = CPU, 0x08 = GPU (ยืนยันข้ามแหล่งกับ MSAcpi_ThermalZoneTemperature: 45 == 45.1°C)</div>
+อุณหภูมิ: EC 0x07 = CPU, 0xC7 = GPU (field VGAT — แก้จากข้อสรุปเดิม 0x08 ซึ่งเป็น AC1 trip point) · พัดลม: DUT1/2 @ 0xCE/CF, RPM1/2 @ 0xD0/D2 (โหมด monitor อ่านอย่างเดียว — เขียน duty ถูก EC ทับกลับเสมอ พิสูจน์แล้ว v1.9.1; EC สะท้อน tachometer พัดลมเดียวไปทั้งสองช่อง v1.9.10)</div>
 </section>
 
 <section id="tests" class="wrap">
   <h2><span class="no">08</span>สถานะการทดสอบ</h2>
   <table>
     <tr><th>ชุดทดสอบ</th><th>วิธี</th><th>ผล</th></tr>
-    <tr><td>โปรโตคอล EC (offline, mock)</td><td><code>test_all.bat</code> [3/6]</td><td>✅ PASS — ตรง DSDT decode ทุก sequence</td></tr>
-    <tr><td>Music / Ambient / Temp engines (offline)</td><td><code>test_all.bat</code> [4-6/6]</td><td>✅ PASS ทั้ง 3 ชุด</td></tr>
-    <tr><td>AST audit (attribute หาย/shadow)</td><td><code>test_all.bat</code> [2/6]</td><td>✅ CLEAN ทุกไฟล์</td></tr>
+    <tr><td>โปรโตคอล EC (offline, mock)</td><td><code>test_all.bat</code> [3/8]</td><td>✅ PASS — ตรง DSDT decode ทุก sequence</td></tr>
+    <tr><td>Music / Ambient / Temp engines (offline)</td><td><code>test_all.bat</code> [4-6/8]</td><td>✅ PASS ทั้ง 3 ชุด</td></tr>
+    <tr><td>Config + daemon mixin + fan (offline)</td><td><code>test_all.bat</code> [7/8]</td><td>✅ PASS — รวม mirror-collapse ของพัดลม</td></tr>
+    <tr><td>AST audit (attribute หาย/shadow)</td><td><code>test_all.bat</code> [2/8]</td><td>✅ CLEAN ทุกไฟล์</td></tr>
+    <tr><td>Live smoke test (daemon จริง)</td><td><code>smoke_test.py</code> [8/8]</td><td>✅ 13 เช็ค PASS — auth/API/EC/dashboard ครบ</td></tr>
     <tr><td>GUI smoke test (ฮาร์ดแวร์จริง)</td><td><code>--smoke-test</code> (admin)</td><td>✅ 51 ขั้น PASS 0 failures</td></tr>
+    <tr><td>CI (GitHub Actions)</td><td>ทุก push ไป master</td><td>✅ test suite + build exe + selftest บน runner</td></tr>
     <tr><td>Music end-to-end (โน้ตจริงออกลำโพง)</td><td><code>ec_music_test.py</code></td><td>✅ 100Hz→BASS, 3kHz→TREBLE, 507 EC writes</td></tr>
-    <tr><td>Ambient จริง (จับจอ)</td><td><code>ec_music_test.py</code></td><td>✅ 705 EC writes / 6 วิ</td></tr>
-    <tr><td>Monitor resume/hotplug (ยิงสัญญาณจริง)</td><td><code>ec_probe_monitor_temp.py</code></td><td>✅ daemon.log: applied (resume/displaychange)</td></tr>
-    <tr><td>Effect firmware 7 โหมด</td><td><code>ec_mode_test.py</code></td><td>✅ EC รับหมด ไม่มี error</td></tr>
+  </table>
+</section>
+
+<section id="v19x" class="wrap">
+  <h2><span class="no">09</span>ระบบเสริม v1.9.x — Dashboard ขั้นสูง</h2>
+  <table>
+    <tr><th>ระบบ</th><th>ใช้งาน</th></tr>
+    <tr><td>📱 เปิดจากมือถือ</td><td>GUI → แผง <b>Mobile access</b> → ตั้ง token + เปิด LAN → เส้นทางไฟร์วอลล์สร้างให้อัตโนมัติ → สแกน QR ด้วยมือถือ (แสดงกลับมาใน GUI)</td></tr>
+    <tr><td>⚙️ ตั้งค่าแจ้งเตือนบนเว็บ</td><td>แผง Notifications บน Dashboard — เกณฑ์/ช่องทาง + ปุ่มส่งข้อความทดสอบ (การเขียนค่าต้องเปิด <code>allow_control</code>)</td></tr>
+    <tr><td>⬇️ ดาวน์โหลดอัปเดต</td><td>chip เวอร์ชันบน Dashboard จะมีปุ่มเมื่อเจอ release ใหม่ — daemon ดึง zip มาเก็บไว้ให้ (ไม่ auto-install)</td></tr>
+    <tr><td>🚬 ตรวจหลัง deploy</td><td><code>python smoke_test.py --port 8787</code> — 13 เช็คสถานะจริง ใช้ gate หลังอัปเกรด/ติดตั้ง</td></tr>
   </table>
 </section>
 
 <footer class="wrap">
-  Clevo Backlight Controller · โปรโตคอลถอดรหัสจาก DSDT ของเครื่องเอง · ไม่มี network call · โค้ดเปิดทั้งหมด<br>
-  คู่มือฉบับเต็ม: <b>README.md</b> · ประวัติเวอร์ชัน: <b>CHANGELOG.md</b>
+  Clevo Backlight Controller · โปรโตคอลถอดรหัสจาก DSDT ของเครื่องเอง · network call เฉพาะ dashboard (localhost/LAN) + auto-update check (opt-in) · โค้ดเปิดทั้งหมด<br>
+  คู่มือฉบับเต็ม: <b>README.md</b> · งานวิจัย: <b>docs/research.html</b> · ประวัติเวอร์ชัน: <b>CHANGELOG.md</b>
 </footer>
 
 </body>

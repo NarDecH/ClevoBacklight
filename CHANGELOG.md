@@ -5,11 +5,13 @@
 ## [1.9.11] — 2026-09-18
 
 ### Added
+- **Mobile access — เปิด Dashboard จากมือถือ**: แผงใหม่ใน GUI ("Mobile access") ตรวจเงื่อนไข bind=lan + token → สร้าง QR สแกนเปิดเว็บจากมือถือใน Wi-Fi เดียวกัน (มีปุ่มคัดลอกลิงก์ + ปุ่มเปิดไฟร์วอลล์ TCP 8787 ฝั่ง private ผ่าน UAC)
 - **`smoke_test.py` — end-to-end smoke test กับ daemon ที่รันอยู่**: token auth, dashboard HTML, API ครบทุก endpoint (status/daily/history.csv/notify-config/events/events.jsonl/update/weekly), ค่า EC สมเหตุสมผล, POST ไม่ 500 — exit code ชัดเจน ใช้เป็น gate หลัง deploy/อัปเกรดได้ (`python smoke_test.py [--port 8787] [--token …] [--no-ec]`)
 - test_all.bat ขั้น **[8/8]**: รัน smoke อัตโนมัติเมื่อมี daemon ฟังพอร์ตอยู่ (auto-skip เมื่อไม่มี — ไม่พังบน CI)
 
 ### Changed
-- เก็บกวาด repo: ลบ bat release script รุ่นเก่า 10 ไฟล์ + สคริปต์ทดสอบครั้งเดียว, เลิก track log 7 ไฟล์ (ปิดรูด้วย `*.log` ใน .gitignore), ลบ zip release เก่าในเครื่อง 13 ไฟล์ (~350 MB — ตัวจริงอยู่บน GitHub Releases แล้ว)
+- เก็บกวาด repo + เครื่อง: ลบ bat release script รุ่นเก่า 10 ไฟล์ + สคริปต์ทดสอบครั้งเดียว, เลิก track log 7 ไฟล์ (ปิดรูด้วย `*.log` ใน .gitignore), ลบ zip release เก่าในเครื่อง 13 ไฟล์ + installer เก่า 5 ไฟล์ + build/ + staging (~660 MB รวม) — dist เหลือเฉพาะตัวรันจริง + runtime state
+- คู่มือ docs/index.html: การ์ดฟีเจอร์ v1.9.x ครบ, แก้ข้อมูล GPU temp เป็น 0xC7, ตารางทดสอบเป็นรอบ 8 ขั้น + CI, หัวข้อ 09 ระบบเสริม
 - RESEARCH.md + docs/research.html: เพิ่มผลวิจัย fan tachometer mirror (v1.9.10), ส่วน release engineering, บั๊ก task-ชน/ISCC flag
 
 ### Fixed
