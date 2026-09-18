@@ -2,7 +2,17 @@
 
 รูปแบบอ้างอิง [Keep a Changelog](https://keepachangelog.com/) — เวอร์ชันตามเสถียรภาพของฟีเจอร์ (ไม่มี release สาธารณะ ใช้ภายในเครื่อง)
 
-## [1.9.14] — 2026-09-18
+## [1.9.15] — 2026-09-18
+
+### Added
+- **แต่งโปรไฟล์สีจากมือถือ** — แผงใหม่บน Dashboard (color picker 3 โซน + ความสว่าง + เอฟเฟกต์ + ความเร็ว): บันทึกเป็นโปรไฟล์ใหม่/แก้ตัวเดิม แล้วกด "ใช้ทันที" ได้ในคลิกเดียว · API ใหม่ `GET/POST /api/profiles` (การเขียนต้องเปิด allow_control) ผ่าน `config.upsert_profile` ที่ validate ทุกค่า (สี 3 ช่อง, mode ที่มีจริง, brightness 0–3, speed 0–9, ชื่อ ≤24 ตัวอักษร และกันชื่อขึ้นต้น password) · ทุกความพยายามเขียน log ลง events.jsonl (`profile_upsert`)
+- **ติดตั้ง Dashboard เป็นแอปมือถือ (PWA)** — `manifest.webmanifest` + service worker + ไอคอน 192/512 (สร้างจาก PIL) · strategy **network-first**: ข้อมูลสดเสมอ, API ไม่ถูก cache (token ไม่มีทางตกค้าง), offline shell แสดงแบนเนอร์ "ออฟไลน์" เมื่อ daemon เข้าไม่ถึง · ไฟล์ static ถูก bundle ใน exe ผ่าน spec แล้ว
+- **`SECURITY.md`** — สถาปัตยกรรมความปลอดภัย 7 ชั้น (loopback default → LAN fallback → token → AuthGuard → allow_control → validation → firewall Private) + threat model + แนวปฏิบัติ
+
+### Verified
+- test suite ผ่านครบ: profiles endpoint (create/update/400×5/PWA static), auth guard, lock audit, smoke 15 เช็ค
+
+## [1.9.14](https://github.com/NarDecH/ClevoBacklight/releases/tag/v1.9.14) — 2026-09-18
 
 ### Added
 - **การ์ดคุมไฟครบสมบูรณ์บน Dashboard** — เพิ่ม**สไลเดอร์ความสว่าง 0–3** (ส่งคำสังตอนปล่อยนิ้ว + แสดงระดับปัจจุบันจาก `/api/status.brightness`) และ**ปุ่มโปรไฟล์ทุกตัวในการ์ดเดียว** พร้อมไฮไลต์โปรไฟล์ที่ใช้งาน (`/api/status.profile`)

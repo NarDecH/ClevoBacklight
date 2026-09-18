@@ -120,6 +120,7 @@
 - **Hardware profiles:** map เซ็นเซอร์ต่อรุ่น (`hardware.profile`) + `--dump-ec`/`--diff` หาเซ็นเซอร์เครื่องใหม่
 - **LAN security (v1.9.12):** AuthGuard — ทุก token ที่ผิดถูก log IP ลง events.jsonl (`auth_fail`) · ผิด 5 ครั้ง/60 วิ = บลอก IP นั้น 300 วิ (ตอบ 429 แม้ token ถูกภายหลัง) · toast แจ้งเจ้าของเครื่อง (dedup 10 นาที) — unit test ครอบทั้ง logic และ HTTP wiring จริง (401→429→events)
 - **Mobile access (v1.9.11):** dashboard `bind: lan` + token บังคับ (fallback loopback ถ้าไม่มี token — กันเว็บเปล่าคุมไฟ) → GUI สร้าง QR จาก LAN IP (UDP trick หา IP ของเกตเวย์) + เปิดไฟร์วอลล์ TCP 8787 ฝั่ง private ผ่าน UAC — มือถือสแกนแล้วเปิด Dashboard พร้อม token ใน URL
+- **Profile editor จากมือถือ + PWA (v1.9.15):** `POST /api/profiles` (allow_control) → `config.upsert_profile` normalize สี/mode/ความสว่าง/ชื่อ (กันชื่อ password*, จำกัด 24 ตัวอักษร) ก่อนเขียน settings · หน้าเว็บ**ติดตั้งเป็นแอปมือถือได้** (manifest + service worker แบบ network-first, offline shell เฉพาะหน้า HTML — **API ไม่ถูก cache และ token ไม่มีทางตกค้างใน cache**)
 - **Release engineering (v1.9.6–1.9.10):** รีโมตสลับ engine จาก dashboard (music/ambient/temp), ตั้งค่า + ปุ่มทดสอบการแจ้งเตือนบนเว็บ (toast/Discord/Telegram), event log JSONL พร้อม viewer, auto-update checker (opt-in — เช็ค GitHub release ทุก 6 ชม. + ปุ่มดาวน์โหลด), **CI สร้าง release เองทั้ง exe + installer จาก tag** (GitHub Actions + Inno Setup) — พิสูจน์ด้วย v1.9.10 ที่ release/อัปเกรดเครื่องนี้จาก zip ของ release จริง
 
 ## 8) บั๊กที่ค้นพบ + บทเรียน
@@ -156,4 +157,4 @@
 → ระบบหลัง deploy v1.9.13 ทำงานสะอาด · events.jsonl ใช้ตรวจย้อนหลังได้จริง (viewer/filter บน dashboard หรือ CLI `--export-events`)
 
 ---
-*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.13) · หน้าเว็บฉบับสวย: `docs/research.html`*
+*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.15) · หน้าเว็บฉบับสวย: `docs/research.html` · ความปลอดภัย: `SECURITY.md`*

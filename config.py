@@ -104,7 +104,7 @@ DEFAULTS = {
     "updates": {"enabled": False, "repo": "NarDecH/ClevoBacklight", "interval_s": 21600},
 }
 
-APP_VERSION = "1.9.14"
+APP_VERSION = "1.9.15"
 
 MODES = ["custom", "breathe", "cycle", "random", "dance", "tempo", "flash", "wave"]
 
@@ -528,6 +528,63 @@ def current_schedule_slot(slots, now_hhmm):
         else:
             break
     return cur
+
+
+def upsert_profile(settings, name, prof):
+    """Create/update profile <name> from an untrusted dict (dashboard/web).
+
+    Normalizes via the same rules as _validate_profiles (brightness 0-3,
+    speed 0-9, known mode, 3 hex colors, password names rejected); raises
+    ValueError with a user-facing message on invalid input.
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("profile name required")
+    name = name.strip()
+    if len(name) > 24:
+        raise ValueError("profile name too long (max 24)")
+    if "password" in name.lower():
+        raise ValueError("profile names starting with 'password' are reserved")
+    if not isinstance(prof, dict):
+        raise ValueError("profile must be an object")
+    try:
+        brightness = max(0, min(3, int(prof.get("brightness", 2))))
+    except (TypeError, ValueError):
+        raise ValueError("brightness must be 0-3")
+    try:
+        speed = max(0, min(9, int(prof.get("speed", 4))))
+    except (TypeError, ValueError):
+        raise ValueError("speed must be 0-9")
+    mode = prof.get("mode", "custom")
+    if mode not in MODES:
+        raise ValueError("unknown mode %r" % mode)
+    colors = prof.get("colors")
+    if not isinstance(colors, (list, tuple)) or len(colors) != 3:
+        raise ValueError("colors must be a list of 3 hex colors")
+    norm = []
+    for c in colors:
+        cc = _norm_color_static(c)
+        if cc is None:
+            raise ValueError("invalid color %r (use RRGGBB)" % (c,))
+        norm.append(cc)
+    with settings.lock:
+        profiles = settings.data.setdefault("profiles", {})
+        profiles[name] = {"brightness": brightness, "colors": norm,
+                          "mode": mode, "speed": speed}
+        settings.save()
+    return profiles[name]
+
+
+def _norm_color_static(c):
+    """#RRGGBB / RRGGBB -> RRGGBB, else None."""
+    if isinstance(c, str):
+        s = c.strip().lstrip("#").upper()
+        if len(s) == 6:
+            try:
+                int(s, 16)
+                return s
+            except ValueError:
+                pass
+    return None
 
 
 def apply_profile(kb, settings, name):

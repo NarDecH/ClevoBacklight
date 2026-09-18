@@ -195,6 +195,7 @@
     <tr><td>🩺 Health/Dashboard</td><td>status.json + history.json + localhost:8787 + toast</td><td class="ok">/api/status ตอบจริง ec_ok:true</td></tr>
     <tr><td>🛡️ LAN security</td><td>AuthGuard — log IP ที่เดา token · 5 ครั้ง/60 วิ = บลอก 300 วิ (429) · toast แจ้งเจ้าของ (dedup)</td><td class="ok">unit test ครอบ logic + HTTP wiring (401→429→events) (v1.9.12)</td></tr>
     <tr><td>📱 Mobile access</td><td>dashboard bind=lan + token บังคับ → QR จาก LAN IP + เปิดไฟร์วอลล์ 8787 ผ่าน UAC</td><td class="ok">สแกนแล้วเปิด Dashboard จากมือถือใน Wi-Fi เดียวกัน (v1.9.11)</td></tr>
+    <tr><td>🎨 Profile editor + PWA</td><td>POST /api/profiles (allow_control) → normalize สี/mode/ชื่อ · manifest + service worker (network-first, API ไม่ cache)</td><td class="ok">แต่งโปรไฟล์จากมือถือได้ + ติดตั้งเป็นแอป (v1.9.15)</td></tr>
     <tr><td>🚀 Release engineering</td><td>รีโมตสลับ engine · ตั้งค่าแจ้งเตือนบนเว็บ (toast/Discord/Telegram) · event log JSONL + viewer · auto-update checker (opt-in) + ปุ่มดาวน์โหลด · <b>CI สร้าง release เองจาก tag</b> (Actions + Inno Setup)</td><td class="ok">v1.9.10 ปล่อยโดย CI · อัปเกรดเครื่องนี้จาก zip ของ release จริง</td></tr>
   </table>
 </section>
@@ -239,7 +240,7 @@
   <p class="muted">→ ระบบหลัง deploy v1.9.13 ทำงานสะอาด · events.jsonl ใช้ตรวจย้อนหลังได้จริง (viewer/filter บน dashboard หรือ CLI <code>--export-events</code>)</p>
 </section>
 
-<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.13)</footer>
+<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.15) · ความปลอดภัย: SECURITY.md</footer>
 </div>
 </body>
 </html>

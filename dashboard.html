@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0d1117">
+<link rel="icon" href="/icon-192.png">
 <title>Clevo Backlight — Live Dashboard</title>
 <style>
   :root{
@@ -36,6 +39,7 @@
 </style>
 </head>
 <body>
+<div id="offline" style="display:none; background:var(--bad); color:#fff; text-align:center; padding:8px; font-size:.85rem">⊘ ออฟไลน์ — แสดงหน้าจอค้างไว้ จะกลับมาสดเมื่อเชื่อม daemon ได้อีกครั้ง</div>
 <h1>Clevo Backlight — Live Dashboard</h1>
 <div class="sub">daemon <span class="mono" id="ver">…</span> · refresh ทุก 5 วิ จาก <span class="mono">/api/status</span> · <span class="chip" id="updateChip">—</span></div>
 
@@ -155,6 +159,25 @@
   <table id="dailyTable"><tr><th>วันที่</th><th>อุณหภูมิเฉลี่ย/สูงสุด</th><th>RPM เฉลี่ย/สูงสุด</th><th>EC fail</th></tr></table>
 </div>
 
+<div class="panel" id="profileEditor" style="display:none">
+  <h2>แต่งโปรไฟล์สี (สร้าง/แก้ได้จากมือถือ — ต้องเปิด allow_control)</h2>
+  <div class="row" style="flex-wrap:wrap; gap:10px; align-items:flex-end">
+    <label class="k">ชื่อโปรไฟล์<br><input id="peName" list="peNames" placeholder="my-profile" style="background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:6px; padding:6px 8px; width:140px">
+      <datalist id="peNames"></datalist></label>
+    <label class="k">ซ้าย<br><input type="color" id="peC0" value="#ff3b30" style="width:44px; height:32px; border:none; background:none"></label>
+    <label class="k">กลาง<br><input type="color" id="peC1" value="#00ff88" style="width:44px; height:32px; border:none; background:none"></label>
+    <label class="k">ขวา<br><input type="color" id="peC2" value="#30b0c7" style="width:44px; height:32px; border:none; background:none"></label>
+    <label class="k">ความสว่าง<br><select id="peB" style="background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px"><option>0</option><option>1</option><option>2</option><option selected>3</option></select></label>
+    <label class="k">โหมด<br><select id="peM" style="background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px"><option value="custom" selected>custom</option><option value="random">random</option><option value="dance">dance</option><option value="tempo">tempo</option><option value="flash">flash</option><option value="wave">wave</option><option value="breathe">breathe</option></select></label>
+    <label class="k">ความเร็ว<br><select id="peS" style="background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px"><option>0</option><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option></select></label>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button class="chip" id="peSave" style="border-color:var(--acc); color:var(--acc)">💾 บันทึกโปรไฟล์</button>
+    <button class="chip" id="peUse">▶ ใช้ทันที</button>
+    <span class="k" id="peMsg" style="color:var(--mut)"></span>
+  </div>
+</div>
+
 <footer>ClevoBacklight daemon · หน้านี้อ่านจาก localhost เท่านั้น (127.0.0.1) — ไม่มีข้อมูลออกนอกเครื่อง</footer>
 
 <script>
@@ -260,6 +283,7 @@ function render(d){
   $('uptime').textContent = fmtUptime(d.uptime_s);
   showRemote(d);
   showPower(d);
+  showProfileEditor(d);
   drawViz(d);
   const eng = (d.engines && d.engines.length) ? d.engines : [];
   $('engines').innerHTML = eng.length
@@ -464,6 +488,72 @@ function bindRemote(){
   });
 }
 bindRemote();
+
+/* ---- profile editor (v1.9.15, allow_control only) ---- */
+function showProfileEditor(d){
+  const p = $('profileEditor');
+  if (!d.allow_control){ p.style.display = 'none'; return; }
+  p.style.display = '';
+  fetch('/api/profiles' + location.search).then(r => r.json()).then(j => {
+    const dl = $('peNames'); dl.innerHTML = '';
+    Object.keys(j.profiles || {}).forEach(n => {
+      const o = document.createElement('option'); o.value = n; dl.appendChild(o);
+    });
+  }).catch(() => {});
+}
+$('peName').addEventListener('change', () => {
+  const n = $('peName').value.trim(); if (!n) return;
+  fetch('/api/profiles' + location.search).then(r => r.json()).then(j => {
+    const pr = (j.profiles || {})[n]; if (!pr) return;
+    $('peC0').value = '#' + pr.colors[0]; $('peC1').value = '#' + pr.colors[1];
+    $('peC2').value = '#' + pr.colors[2]; $('peB').value = pr.brightness;
+    $('peM').value = pr.mode; $('peS').value = pr.speed;
+  }).catch(() => {});
+});
+function pePayload(){
+  const hex = id => $(''+id).value.replace('#','').toUpperCase();
+  return {profile: {brightness: +$('peB').value, mode: $('peM').value,
+                    speed: +$('peS').value,
+                    colors: [hex('peC0'), hex('peC1'), hex('peC2')]}};
+}
+$('peSave').onclick = async () => {
+  const name = $('peName').value.trim();
+  const msg = $('peMsg');
+  if (!name){ msg.textContent = 'ใส่ชื่อโปรไฟล์ก่อน'; return; }
+  try{
+    const r = await fetch('/api/profiles' + location.search, {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, ...pePayload()})});
+    const j = await r.json().catch(() => ({}));
+    msg.textContent = r.ok ? 'บันทึก ' + name + ' แล้ว' : 'ผิดพลาด (' + r.status + '): ' + (j.error || '?');
+    if (r.ok) showProfileEditor({allow_control: true});
+  }catch(e){ msg.textContent = 'ส่งไม่ได้: ' + e; }
+};
+$('peUse').onclick = async () => {
+  const name = $('peName').value.trim();
+  const msg = $('peMsg');
+  if (!name){ msg.textContent = 'ใส่ชื่อโปรไฟล์ก่อน'; return; }
+  try{
+    let r = await fetch('/api/profiles' + location.search, {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, ...pePayload()})});
+    if (!r.ok){ const j = await r.json().catch(() => ({}));
+      msg.textContent = 'ผิดพลาด (' + r.status + '): ' + (j.error || '?'); return; }
+    r = await fetch('/api/cmd' + location.search, {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'profile', name})});
+    const j = await r.json().catch(() => ({}));
+    msg.textContent = r.ok ? 'ใช้โปรไฟล์ ' + name + ' แล้ว' : 'ผิดพลาด (' + r.status + '): ' + (j.error || '?');
+  }catch(e){ msg.textContent = 'ส่งไม่ได้: ' + e; }
+};
+
+/* ---- PWA (v1.9.15): installable + offline shell ---- */
+if ('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+window.addEventListener('offline', () => $('offline').style.display = '');
+window.addEventListener('online', () => $('offline').style.display = 'none');
+if (!navigator.onLine) $('offline').style.display = '';
 
 function showPower(d){
   const panel = $('powerPanel');

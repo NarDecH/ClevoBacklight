@@ -1197,6 +1197,33 @@ class Daemon:
                     self.end_headers()
                     self.wfile.write(body)
                     return
+                if path == "/api/profiles":
+                    # create/update a color profile from the dashboard/phone
+                    if not cfg.get("allow_control", False):
+                        self._json_error(403, "control disabled (dashboard.allow_control)")
+                        return
+                    try:
+                        length = int(self.headers.get("Content-Length", 0) or 0)
+                        payload = json.loads(self.rfile.read(length) or b"{}")
+                    except ValueError:
+                        self._json_error(400, "bad json")
+                        return
+                    try:
+                        prof = config.upsert_profile(
+                            daemon.settings, payload.get("name"),
+                            payload.get("profile") or payload)
+                    except ValueError as exc:
+                        self._json_error(400, str(exc))
+                        return
+                    elog(EV_NOTIFY, nkind="profile_upsert", name=payload.get("name"))
+                    body = json.dumps({"ok": True, "name": payload.get("name"),
+                                       "profile": prof}, ensure_ascii=False).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 if path != "/api/cmd":
                     self._json_error(404, "not found")
                     return
@@ -1249,6 +1276,18 @@ class Daemon:
                     return
                 if path in ("/", "/index.html", "/dashboard"):
                     body, ctype = self._read("dashboard.html"), "text/html; charset=utf-8"
+                elif path == "/manifest.webmanifest":
+                    body = self._read("manifest.webmanifest")
+                    ctype = "application/manifest+json; charset=utf-8"
+                elif path == "/sw.js":
+                    body = self._read("sw.js")
+                    ctype = "text/javascript; charset=utf-8"
+                elif path == "/icon-192.png":
+                    body = self._read("icon-192.png")
+                    ctype = "image/png"
+                elif path == "/icon-512.png":
+                    body = self._read("icon-512.png")
+                    ctype = "image/png"
                 elif path == "/api/status":
                     body = json.dumps(daemon._status_body()).encode("utf-8")
                     ctype = "application/json; charset=utf-8"
@@ -1289,6 +1328,19 @@ class Daemon:
                     except OSError:
                         body = b""
                     ctype = "application/x-ndjson"
+                elif path == "/api/profiles":
+                    if not cfg.get("allow_control", False):
+                        self._json_error(403, "control disabled (dashboard.allow_control)")
+                        return
+                    profs = daemon.settings.get("profiles", {})
+                    active = daemon.settings.get("active_profile", "")
+                    body = json.dumps({"active": active, "profiles": profs},
+                                      ensure_ascii=False).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
                 elif path == "/api/update":
                     try:
                         body = json.dumps(daemon.check_for_update(),

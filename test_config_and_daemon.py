@@ -311,6 +311,90 @@ def test_history_csv(tmp):
     print("history CSV OK")
 
 
+def test_profiles_endpoint_and_upsert(tmp):
+    """POST /api/profiles creates/updates a profile (validated); GET lists.
+    Static PWA files (manifest/sw/icons) must be served."""
+    import urllib.request
+    import urllib.error
+    status_path = os.path.join(tmp, "status.json")
+    hist_path = os.path.join(tmp, "history.json")
+    events_path = os.path.join(tmp, "events.jsonl")
+    old = (clevo_daemon.STATUS_PATH, clevo_daemon.HISTORY_PATH,
+           clevo_daemon.EVENTS_PATH)
+    clevo_daemon.STATUS_PATH = status_path
+    clevo_daemon.HISTORY_PATH = hist_path
+    clevo_daemon.EVENTS_PATH = events_path
+    srv = None
+    try:
+        d = make_daemon(tmp)
+        d.settings.data["dashboard"]["allow_control"] = True
+        port = d.start_status_server(port=0)
+        srv = d._dash_server
+        base = "http://127.0.0.1:%d" % port
+
+        # create from the phone-style payload
+        payload = json.dumps({"name": "phone-test",
+                              "profile": {"brightness": 2,
+                                          "colors": ["#ff0000", "00ff00", "#0000ff"],
+                                          "mode": "custom", "speed": 4}}).encode()
+        req = urllib.request.Request(base + "/api/profiles", data=payload,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            j = json.loads(r.read().decode("utf-8"))
+        assert j["ok"] and j["profile"]["colors"] == ["FF0000", "00FF00", "0000FF"], j
+
+        # persisted and listed by GET
+        assert "phone-test" in d.settings.get("profiles"), "profile must persist"
+        with urllib.request.urlopen(base + "/api/profiles", timeout=5) as r:
+            lst = json.loads(r.read().decode("utf-8"))
+        assert "phone-test" in lst["profiles"], lst
+
+        # update-in-place: same name overwrites, no duplicate
+        payload2 = json.dumps({"name": "phone-test",
+                               "profile": {"brightness": 0,
+                                           "colors": ["FF9500", "FF9500", "FF9500"]}}).encode()
+        req2 = urllib.request.Request(base + "/api/profiles", data=payload2,
+                                      headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req2, timeout=5) as r:
+            j2 = json.loads(r.read().decode("utf-8"))
+        assert j2["profile"]["brightness"] == 0, j2
+        assert list(d.settings.get("profiles")).count("phone-test") == 1
+
+        # validation errors -> 400
+        for bad in ({"name": "", "profile": {}},
+                    {"name": "x", "profile": {"colors": ["red"]}},
+                    {"name": "x", "profile": {"colors": ["GG0000", "000000", "000000"]}},
+                    {"name": "x", "profile": {"mode": "nope"}},
+                    {"name": "password stuff"}):
+            reqb = urllib.request.Request(base + "/api/profiles",
+                                          data=json.dumps(bad).encode(),
+                                          headers={"Content-Type": "application/json"})
+            try:
+                urllib.request.urlopen(reqb, timeout=5)
+                raise AssertionError("400 expected for %r" % bad)
+            except urllib.error.HTTPError as e:
+                assert e.code == 400, (bad, e.code)
+
+        # static PWA files served
+        for route, marker in (("/manifest.webmanifest", b'"name"'),
+                              ("/sw.js", b"Clevo Backlight"),
+                              ("/icon-192.png", b"PNG"),
+                              ("/icon-512.png", b"PNG")):
+            with urllib.request.urlopen(base + route, timeout=5) as r:
+                body = r.read()
+                assert marker in body[:64] or r.headers.get("Content-Type", "").startswith("image/"), route
+        print("profiles endpoint + upsert + PWA static OK")
+    finally:
+        (clevo_daemon.STATUS_PATH, clevo_daemon.HISTORY_PATH,
+         clevo_daemon.EVENTS_PATH) = old
+        if srv is not None:
+            try:
+                srv.shutdown()
+                srv.server_close()
+            except Exception:
+                pass
+
+
 def test_update_download_endpoint(tmp):
     """POST /api/update/download: 409 when up-to-date; background download
     with the release zip URL when a newer version exists."""
@@ -834,6 +918,7 @@ def main():
     test_history_csv(tmp)
     test_update_download_endpoint(tmp)
     test_dashboard_history_csv_endpoint(tmp)
+    test_profiles_endpoint_and_upsert(tmp)
     test_dashboard_handler(tmp)
     test_dashboard_token_and_lan_fallback(tmp)
     test_fan_controller()
