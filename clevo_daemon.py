@@ -906,12 +906,14 @@ class Daemon:
     def remote_command(self, payload):
         """Apply one control action from the dashboard/phone (dashboard.allow_control).
 
-        payload: {"action": "power"|"brightness"|"profile"|"engine", ...}
+        payload: {"action": "power"|"brightness"|"profile"|"engine"|"preview", ...}
           power      {"value": true|false}
           brightness {"value": 0..3}
           profile    {"name": "gaming"}
           engine     {"name": "music"|"ambient"|"temp"}   (toggle, like the hotkey)
-        Settings are NOT changed — this drives the EC like a hotkey would.
+          preview    {"profile": {brightness, colors, mode, speed}} — live trial:
+                     pushed to the EC for eyeballing but NOTHING is saved, so a
+                     daemon restart restores the last real profile.
         """
         action = str(payload.get("action", ""))
         if action == "engine":
@@ -944,6 +946,14 @@ class Daemon:
                 # apply_profile marks it active + saves + pushes to the EC
                 # (a plain apply_state would leave the highlight stale)
                 config.apply_profile(kb, self.settings, name)
+            elif action == "preview":
+                # live color trial from the profile editor: same validation as
+                # a saved profile, but settings stay untouched (restore-safe)
+                prof = config.validate_profile_payload(payload.get("profile"))
+                state = dict(self.settings.snapshot())
+                state.update(prof)
+                state["power"] = True
+                config.apply_state(kb, state)
             else:
                 raise ValueError("unknown action %r" % action)
         log("remote cmd: %s %s" % (action, payload.get("value",

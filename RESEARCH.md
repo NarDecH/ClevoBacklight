@@ -156,5 +156,20 @@
 
 → ระบบหลัง deploy v1.9.13 ทำงานสะอาด · events.jsonl ใช้ตรวจย้อนหลังได้จริง (viewer/filter บน dashboard หรือ CLI `--export-events`)
 
+## 11) PWA/offline บนมือถือ (v1.9.15–16)
+
+**สถาปัตยกรรมฝั่ง client (dashboard.html + sw.js) — สรุปการตัดสินใจ:**
+
+| กลไก | การตัดสินใจ | เหตุผล |
+|---|---|---|
+| SW cache `/api/status` | **cache-first + TTL 15 วิ**, cache key คงที่ (`/api/status` ไม่ผูก query) | สด 15 วิพอสำหรับ refresh 5 วิ · offline ยังเรนเดอร์ได้ · **token ไม่มีทางตกค้างใน key** |
+| API อื่นทั้งหมด | ไม่ cache เด็ดขาด (network-only) | กันข้อมูล/token เก่าหลุดออกจากอุปกรณ์ |
+| สถานะล่าสุด | เก็บซ้ำใน `localStorage` (`cb_laststatus`) ทุกครั้งที่ tick สำเร็จ | SW ครอบเฉพาะเบราว์เซอร์ที่ลง SW แล้ว — localStorage รองรับกรณีเปิดครั้งแรกแล้ว daemon ตายทีหลัง |
+| คำสั่งตอนออฟไลน์ | คิว `localStorage` (สูงสุด 20, เก่าทิ้ง) → flush **เก่าก่อนใหม่** เมื่อ tick/online event สำเร็จ | UX ปุ่มกดได้เสมอ · 401/403 = ล้างคิว (ถือว่าถูกปฏิเสธ) · server ตอบ error อื่น = หยุดรอรอบหน้า |
+| Preview สี | action `preview` บน `/api/cmd`: validate ด้วย `config.validate_profile_payload` (ตัวเดียวกับบันทึก) → `apply_state` เข้า EC — **ไม่เขียน settings** | ลองสีได้ไม่อั้นโดยเสี่ยงศูนย์ · ปิด daemon = กลับสู่โปรไฟล์จริงอัตโนมัติ · refactor กัน validate สองทางไม่ตรงกัน |
+| Export/Import โปรไฟล์ | ไฟล์ JSON client-side ผ่าน API เดิม (`{exported, profiles}` wrapper หรือ bare map) | ไม่เพิ่ม endpoint · นำเข้าผ่าน validation เดิมทุกขั้น — ไฟล์แปลกปลอมสร้างโปรไฟล์ไม่ได้ |
+
+**ข้อจำกัดที่ยอมรับ:** SW TTL ทำให้สถานะเก่าสุด 15 วิตอนออฟไลน์ (แสดงแบนเนอร์ชัดเจน) · คิวคำสั่งไม่มี guarantee ระดับ transaction — ถ้าระหว่างออฟไลน์ผู้ใช้เปลี่ยนใจ ต้องกดทับ (คำสั่งเก่าถูกส่งตามก่อน) — ยอมรับได้เพราะทุก action idempotent ในทางปฏิบัติ (power/brightness/profile ล้วน set-absolute)
+
 ---
-*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.15) · หน้าเว็บฉบับสวย: `docs/research.html` · ความปลอดภัย: `SECURITY.md`*
+*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.16) · หน้าเว็บฉบับสวย: `docs/research.html` · ความปลอดภัย: `SECURITY.md`*

@@ -11,7 +11,7 @@
 
 #define MyAppName "Clevo Backlight Controller"
 #ifndef MyAppVersion
-#define MyAppVersion "1.9.15"
+#define MyAppVersion "1.9.16"
 #endif
 #define MyAppExe "ClevoBacklight.exe"
 #define MyAppGUID "{{7E1F4C2A-9B3D-4E58-8A6C-1D2F5A9B0C33}"

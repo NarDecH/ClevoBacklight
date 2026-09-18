@@ -626,6 +626,58 @@ def test_remote_command(tmp):
     print("remote command OK")
 
 
+def test_preview_and_validate_profile(tmp):
+    """config.validate_profile_payload normalizes without saving; the
+    preview remote action pushes the EC but touches NO setting at all."""
+    prof = config.validate_profile_payload(
+        {"brightness": "2", "colors": ["#ff0000", "00ff00", "0000FF"],
+         "mode": "custom", "speed": "4"})
+    assert prof == {"brightness": 2, "colors": ["FF0000", "00FF00", "0000FF"],
+                    "mode": "custom", "speed": 4}, prof
+    for bad in ({"colors": ["red"]}, {"colors": ["GG0000", "000000", "000000"]},
+                {"mode": "nope"}, {"brightness": "x"},
+                {"speed": "x"}, {"colors": ["FF0000", "FF0000"]}):
+        try:
+            config.validate_profile_payload(bad)
+            raise AssertionError("400-style ValueError expected for %r" % bad)
+        except ValueError:
+            pass
+    # name rules stay in upsert_profile (storage concern)
+    st = config.Settings(path=os.path.join(tmp, "settings_pv.json"))
+    try:
+        config.upsert_profile(st, "password stuff", {"colors": ["FF0000", "FF0000", "FF0000"]})
+        raise AssertionError("reserved name must raise")
+    except ValueError:
+        pass
+    # preview: EC gets power+brightness+zones; settings object untouched
+    cfg_path = os.path.join(tmp, "settings_remote.json")
+    st2 = config.Settings(path=cfg_path)
+    d = make_daemon(tmp)
+    d.settings = st2
+    kb = _Kb()
+    d.connect = lambda: kb
+    updates = []
+    d.settings.set = lambda k, v, save=True: updates.append((k, v))
+    d._update_tray = lambda: None
+    before = (st2.get("active_profile"), st2.get("colors"), st2.get("brightness"))
+    r = d.remote_command({"action": "preview",
+                          "profile": {"brightness": 1,
+                                      "colors": ["FF9500", "FF9500", "FF9500"],
+                                      "mode": "custom", "speed": 4}})
+    assert r["ok"] and r["action"] == "preview", r
+    assert ("power", True) in kb.calls and ("brightness", 1) in kb.calls, kb.calls
+    assert ("zone", 0, 255, 149, 0) in kb.calls, kb.calls
+    assert updates == [], "preview must not touch settings"       # nothing saved
+    assert (st2.get("active_profile"), st2.get("colors"),
+            st2.get("brightness")) == before, "preview must not persist anything"
+    try:
+        d.remote_command({"action": "preview", "profile": {"colors": ["red"]}})
+        raise AssertionError("invalid preview must raise")
+    except ValueError:
+        pass
+    print("preview + validate_profile_payload OK")
+
+
 def test_backup_roundtrip(tmp):
     """make_backup copies both files, prunes to 7 stamps, restore works."""
     import clevo_daemon as cd
@@ -906,6 +958,7 @@ def main():
     test_history_and_status_body(tmp)
     test_daily_roll(tmp)
     test_remote_command(tmp)
+    test_preview_and_validate_profile(tmp)
     test_backup_roundtrip(tmp)
     test_weekly_and_hot_hour(tmp)
     test_discord_helpers(tmp)

@@ -2,6 +2,20 @@
 
 รูปแบบอ้างอิง [Keep a Changelog](https://keepachangelog.com/) — เวอร์ชันตามเสถียรภาพของฟีเจอร์ (ไม่มี release สาธารณะ ใช้ภายในเครื่อง)
 
+## [1.9.16] — 2026-09-18
+
+### Added
+- **พรีวิวสีสดก่อนบันทึก** — แถบพรีวิว 3 โซนในแผงแต่งโปรไฟล์ตาม color picker ทันที + ปุ่ม "ลองสีนี้ (ไม่บันทึก)" และ auto-preview เมื่อเลือกเสร็จ (หน่วง 1.2 วิ + debounce เรียงคิวฝั่ง JS) · action ใหม่ `preview` บน `/api/cmd` (ต้องเปิด allow_control): ผ่าน `config.validate_profile_payload` (ตัวเดียวกับการบันทึก) แล้ว push เข้า EC ผ่าน `apply_state` — **ไม่แตะ settings เลย** ปิด daemon แล้วกลับมาเป็นโปรไฟล์เดิมเสมอ · ปุ่มเสริม "คืนค่าโปรไฟล์ที่ใช้อยู่"
+- **ส่งออก/นำเข้าโปรไฟล์** — "⬇ ส่งออก" ดาวน์โหลดโปรไฟล์ทั้งหมดเป็นไฟล์ JSON (`clevo-profiles-<วันที่>.json` ใช้แชร์/สำรอง) · "⬆ นำเข้า" เลือกไฟล์แล้ว upsert ทีละรายการผ่าน validation เดิม (รับทั้ง wrapper `{exported, profiles}` และ bare map) — รายงานจำนวนสำเร็จ/ข้าม
+- **Offline mode เต็มรูปแบบบนมือถือ** — SW cache `/api/status` แบบ **cache-first + TTL 15 วิ** (สดเมื่อออนไลน์, เสิร์ฟแคชล่าสุดเมื่อ daemon ล่ม, key คงที่ไม่มี token ตกค้าง) · หน้าเว็บเรนเดอร์จากสถานะล่าสุดใน localStorage แทนหน้าว่าง · **คิวคำสั่ง**: ทุกปุ่ม/สไลเดอร์/พรีวิวที่กดตอนออฟไลน์ถูกคิวใน localStorage (สูงสุด 20) และ flush อัตโนมัติเมื่อกลับมา — 401/403 ล้างคิว, ความสำเร็จส่งเก่าก่อนใหม่ · แบนเนอร์แสดงจำนวนคิวรอส่ง
+
+### Changed
+- refactor `config.upsert_profile` — ดึงการ validate เป็น `config.validate_profile_payload` (ใช้ร่วมกับ preview, กฎชื่ออยู่ที่ upsert เท่านั้น)
+
+### Verified
+- unit: `test_preview_and_validate_profile` (normalize ครบ, 400-style errors, preview แตะ EC แต่ไม่ persist ทุกคีย์) · `test_config_and_daemon` ผ่านครบ
+- live: smoke 15/15 กับ daemon จริงหลังสลับ exe (แยกรอบ release ด้านล่าง)
+
 ## [1.9.15] — 2026-09-18
 
 ### Added

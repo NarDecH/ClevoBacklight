@@ -172,8 +172,20 @@
     <label class="k">ความเร็ว<br><select id="peS" style="background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px"><option>0</option><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option></select></label>
   </div>
   <div class="row" style="margin-top:10px">
+    <div class="k" style="display:flex; flex-direction:column; gap:4px">
+      <span>พรีวิวสด (ส่งตรงถึงไฟจริง — ไม่บันทึก)</span>
+      <div style="display:flex; gap:4px; height:22px">
+        <div style="width:46px; height:100%; border-radius:6px 0 0 6px; border:1px solid var(--line); background:#ff3b30" id="pePV0"></div>
+        <div style="width:46px; height:100%; border:1px solid var(--line); background:#00ff88" id="pePV1"></div>
+        <div style="width:46px; height:100%; border-radius:0 6px 6px 0; border:1px solid var(--line); background:#30b0c7" id="pePV2"></div>
+      </div>
+    </div>
+    <button class="chip" id="pePreview" style="border-color:var(--acc2); color:var(--acc2)">👁 ลองสีนี้ (ไม่บันทึก)</button>
     <button class="chip" id="peSave" style="border-color:var(--acc); color:var(--acc)">💾 บันทึกโปรไฟล์</button>
     <button class="chip" id="peUse">▶ ใช้ทันที</button>
+    <button class="chip" id="peExport" title="ดาวน์โหลดโปรไฟล์ทั้งหมดเป็นไฟล์ JSON แชร์/สำรองได้">⬇ ส่งออก</button>
+    <button class="chip" id="peImport" title="เปิดไฟล์ JSON ที่ส่งออกไว้เพื่อนำเข้าโปรไฟล์">⬆ นำเข้า</button>
+    <input type="file" id="peImportFile" accept=".json,application/json" style="display:none">
     <span class="k" id="peMsg" style="color:var(--mut)"></span>
   </div>
 </div>
@@ -314,9 +326,18 @@ async function tick(){
       $('ec').textContent = 'ต้องใช้ token'; $('ec').className = 'v bad';
       return;
     }
-    render(await r.json());
+    const d = await r.json();
+    offlineCacheSave(d);
+    $('ec').dataset.offline = '';
+    offlineBadge();          // hides when online+empty; shows pending queue
+    render(d);
+    offlineFlush();
   }catch(e){
-    $('ec').textContent = 'offline'; $('ec').className = 'v bad';
+    // offline: re-render the last cached status so the page stays useful
+    $('ec').dataset.offline = '1';
+    const cached = offlineCacheLoad();
+    if (cached && cached.d){ render(cached.d); offlineBadge(); }
+    else { $('ec').textContent = 'offline'; $('ec').className = 'v bad'; offlineBadge(); }
   }
 }
 tick(); setInterval(tick, 5000);
@@ -474,7 +495,10 @@ async function sendCmd(payload){
     const j = await r.json().catch(() => ({}));
     if (r.ok) msg.textContent = 'สำเร็จ: ' + payload.action;
     else msg.textContent = 'ผิดพลาด (' + r.status + '): ' + (j.error || '?');
-  }catch(e){ msg.textContent = 'ส่งคำสั่งไม่ได้: ' + e; }
+  }catch(e){
+    peQueueCmd(payload);
+    msg.textContent = 'ออฟไลน์ — ใส่คิวแล้ว (' + offlineQueueCount() + ' รายการรอส่ง)';
+  }
 }
 function bindRemote(){
   $('rPowOn').onclick = () => sendCmd({action:'power', value:true});
@@ -516,6 +540,38 @@ function pePayload(){
                     speed: +$('peS').value,
                     colors: [hex('peC0'), hex('peC1'), hex('peC2')]}};
 }
+/* live 3-zone preview strip: follows the color pickers instantly */
+['peC0','peC1','peC2'].forEach((id, i) => {
+  const pv = $('pePV' + i);
+  $(id).addEventListener('input', () => pv.style.background = $(id).value);
+  $(id).addEventListener('change', () => pv.style.background = $(id).value);
+});
+/* EC preview: pushed to the keyboard but never saved — restore-safe trial.
+   Debounced to EC speed: auto-preview while picking, at most 1/1.2s. */
+let pePreviewTimer = null, pePreviewBusy = false, pePreviewPending = null;
+function peTryPreview(){
+  if (pePreviewBusy){ pePreviewPending = true; return; }
+  pePreviewBusy = true;
+  fetch('/api/cmd' + location.search, {method:'POST', cache:'no-store',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({action:'preview', ...pePayload()})})
+    .then(r => r.json().catch(() => ({}))).then(() => {
+      $('peMsg').textContent = 'พรีวิวส่งแล้ว (ไม่ได้บันทึก)';
+    })
+    .catch(() => { peQueueCmd({action:'preview', ...pePayload()});
+                   $('peMsg').textContent = 'ออฟไลน์ — คิวคำสั่งไว้ 1 รายการ'; })
+    .finally(() => {
+      pePreviewBusy = false;
+      if (pePreviewPending){ pePreviewPending = false; peTryPreview(); }
+    });
+}
+$('pePreview').onclick = () => peTryPreview();
+['peC0','peC1','peC2','peB','peM','peS'].forEach(id => {
+  $(id).addEventListener('change', () => {
+    clearTimeout(pePreviewTimer);
+    pePreviewTimer = setTimeout(peTryPreview, 1200);
+  });
+});
 $('peSave').onclick = async () => {
   const name = $('peName').value.trim();
   const msg = $('peMsg');
@@ -547,13 +603,116 @@ $('peUse').onclick = async () => {
   }catch(e){ msg.textContent = 'ส่งไม่ได้: ' + e; }
 };
 
+/* profile export/import (client-side over the existing API)
+   Export: full profiles map as a shareable .json backup file.
+   Import: file -> upsert every entry through the server-side validation. */
+$('peExport').onclick = async () => {
+  const msg = $('peMsg');
+  try{
+    const r = await fetch('/api/profiles' + location.search, {cache:'no-store'});
+    if (!r.ok){ msg.textContent = 'ดึงรายการโปรไฟล์ไม่สำเร็จ (' + r.status + ')'; return; }
+    const j = await r.json();
+    const blob = new Blob([JSON.stringify({exported: new Date().toISOString(),
+                                           profiles: j.profiles || {}}, null, 2)],
+                          {type: 'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'clevo-profiles-' + new Date().toISOString().slice(0,10) + '.json';
+    a.click(); URL.revokeObjectURL(a.href);
+    msg.textContent = 'ส่งออกแล้ว ✓';
+  }catch(e){ msg.textContent = 'ส่งออกไม่ได้: ' + e; }
+};
+$('peImport').onclick = () => $('peImportFile').click();
+$('peImportFile').onchange = async () => {
+  const msg = $('peMsg');
+  const f = $('peImportFile').files[0];
+  $('peImportFile').value = '';
+  if (!f) return;
+  let data;
+  try{ data = JSON.parse(await f.text()); }
+  catch(e){ msg.textContent = 'ไฟล์ไม่ใช่ JSON ที่อ่านได้'; return; }
+  const profs = data.profiles || data;      // accept both wrapper and bare map
+  if (!profs || typeof profs !== 'object'){ msg.textContent = 'โครงไฟล์ไม่ถูกต้อง'; return; }
+  let ok = 0, bad = [];
+  for (const [name, prof] of Object.entries(profs)){
+    try{
+      const r = await fetch('/api/profiles' + location.search, {method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({name, profile: prof})});
+      if (r.ok) ok++; else bad.push(name + ' (' + r.status + ')');
+    }catch(e){ bad.push(name); }
+  }
+  msg.textContent = 'นำเข้า ' + ok + ' โปรไฟล์' + (bad.length ? ' · ข้าม: ' + bad.join(', ') : '') + ' ✓';
+  showProfileEditor({allow_control: true});
+};
+
+/* ---- offline mode (v1.9.16): cached last state + command queue ----
+   /api/status is cached by the SW (cache-first with TTL) so the last live
+   page renders even with the daemon down; POSTs to /api/cmd while offline
+   queue in localStorage and flush oldest-first when back. */
+const OFFLINE_MAX = 20;
+function offlineBanner(html){
+  const b = $('offline');
+  if (html){ b.innerHTML = html; b.style.display = ''; }
+  else b.style.display = 'none';
+}
+function offlineBadge(){
+  const n = offlineQueueCount();
+  if (n > 0)
+    offlineBanner('◘ ออฟไลน์ — แสดงสถานะล่าสุดจากแคช · คิวคำสั่งรอส่ง <b>' + n + '</b> รายการ');
+  else if (!navigator.onLine)
+    offlineBanner('◘ ออฟไลน์ — แสดงสถานะล่าสุดจากแคช · คำสั่งที่สั่งจะถูกคิวไว้ส่งอัตโนมัติเมื่อกลับมา');
+  else
+    offlineBanner(null);
+  const el = $('ec');
+  if (!navigator.onLine && el.dataset.offline === '1'){
+    el.textContent = 'offline'; el.className = 'v bad';
+  }
+}
+function offlineQueue(){
+  try{ return JSON.parse(localStorage.getItem('cb_cmdq') || '[]'); }catch(e){ return []; }
+}
+function offlineQueueSave(q){
+  try{ localStorage.setItem('cb_cmdq', JSON.stringify(q.slice(-OFFLINE_MAX))); }catch(e){}
+  offlineBadge();
+}
+function offlineQueueCount(){ return offlineQueue().length; }
+function offlineCacheSave(d){
+  try{ localStorage.setItem('cb_laststatus', JSON.stringify({at: Date.now(), d})); }catch(e){}
+}
+function offlineCacheLoad(){
+  try{ return JSON.parse(localStorage.getItem('cb_laststatus') || 'null'); }catch(e){ return null; }
+}
+async function offlineFlush(){
+  if (offlineQueueCount() === 0) return;
+  const q = offlineQueue();
+  let flushed = 0;
+  for (const p of q){
+    try{
+      const r = await fetch('/api/cmd' + location.search, {method:'POST', cache:'no-store',
+        headers:{'Content-Type':'application/json'}, body: JSON.stringify(p)});
+      if (r.status === 403 || r.status === 401){ offlineQueueSave([]); return; }  // rejected: drop
+      if (r.ok) flushed++;
+      else break;                                                                 // server says no: stop, retry later
+    }catch(e){ break; }                                                           // still offline: stop
+  }
+  if (flushed){
+    offlineQueueSave(q.slice(flushed));
+    $('remoteMsg').textContent = 'ส่งคำสั่งคิวแล้ว ' + flushed + ' รายการ ✓';
+  }
+}
+function peQueueCmd(payload){
+  const q = offlineQueue(); q.push(payload); offlineQueueSave(q);
+  offlineBadge();
+}
+
 /* ---- PWA (v1.9.15): installable + offline shell ---- */
 if ('serviceWorker' in navigator){
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
-window.addEventListener('offline', () => $('offline').style.display = '');
-window.addEventListener('online', () => $('offline').style.display = 'none');
-if (!navigator.onLine) $('offline').style.display = '';
+window.addEventListener('offline', () => offlineBadge());
+window.addEventListener('online', () => { offlineFlush(); tick(); });
+if (!navigator.onLine) offlineBadge();
 
 function showPower(d){
   const panel = $('powerPanel');

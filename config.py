@@ -104,7 +104,7 @@ DEFAULTS = {
     "updates": {"enabled": False, "repo": "NarDecH/ClevoBacklight", "interval_s": 21600},
 }
 
-APP_VERSION = "1.9.15"
+APP_VERSION = "1.9.16"
 
 MODES = ["custom", "breathe", "cycle", "random", "dance", "tempo", "flash", "wave"]
 
@@ -530,20 +530,14 @@ def current_schedule_slot(slots, now_hhmm):
     return cur
 
 
-def upsert_profile(settings, name, prof):
-    """Create/update profile <name> from an untrusted dict (dashboard/web).
+def validate_profile_payload(prof):
+    """Validate/normalize an untrusted profile dict (dashboard/web).
 
-    Normalizes via the same rules as _validate_profiles (brightness 0-3,
-    speed 0-9, known mode, 3 hex colors, password names rejected); raises
-    ValueError with a user-facing message on invalid input.
+    brightness 0-3, speed 0-9, known mode, 3 hex colors; raises ValueError
+    with a user-facing message on invalid input. Returns the normalized
+    {"brightness", "colors", "mode", "speed"} dict WITHOUT saving — the
+    preview path uses this to trial colors on the EC only.
     """
-    if not isinstance(name, str) or not name.strip():
-        raise ValueError("profile name required")
-    name = name.strip()
-    if len(name) > 24:
-        raise ValueError("profile name too long (max 24)")
-    if "password" in name.lower():
-        raise ValueError("profile names starting with 'password' are reserved")
     if not isinstance(prof, dict):
         raise ValueError("profile must be an object")
     try:
@@ -566,10 +560,29 @@ def upsert_profile(settings, name, prof):
         if cc is None:
             raise ValueError("invalid color %r (use RRGGBB)" % (c,))
         norm.append(cc)
+    return {"brightness": brightness, "colors": norm, "mode": mode,
+            "speed": speed}
+
+
+def upsert_profile(settings, name, prof):
+    """Create/update profile <name> from an untrusted dict (dashboard/web).
+
+    Normalizes via validate_profile_payload (brightness 0-3, speed 0-9,
+    known mode, 3 hex colors); raises ValueError with a user-facing message
+    on invalid input. Name rules live here (storage concern, not needed by
+    the preview path).
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("profile name required")
+    name = name.strip()
+    if len(name) > 24:
+        raise ValueError("profile name too long (max 24)")
+    if "password" in name.lower():
+        raise ValueError("profile names starting with 'password' are reserved")
+    norm = validate_profile_payload(prof)
     with settings.lock:
         profiles = settings.data.setdefault("profiles", {})
-        profiles[name] = {"brightness": brightness, "colors": norm,
-                          "mode": mode, "speed": speed}
+        profiles[name] = norm
         settings.save()
     return profiles[name]
 
