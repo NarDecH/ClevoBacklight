@@ -5,7 +5,7 @@ rem  Requires: PyInstaller in the venv (pip install pyinstaller)
 rem ============================================================
 setlocal
 cd /d "%~dp0"
-set "PY=C:\opencv\venv312\Scripts\python.exe"
+set "PY=C:\opencv\venv\Scripts\python.exe"
 if not exist "%PY%" set "PY=python.exe"
 
 rem  never build from a red state: run every offline check first

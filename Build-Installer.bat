@@ -6,7 +6,7 @@ rem  Runs the exe build first if dist\ClevoBacklight.exe is missing.
 rem ============================================================
 setlocal
 cd /d "%~dp0"
-set "PY=C:\opencv\venv312\Scripts\python.exe"
+set "PY=C:\opencv\venv\Scripts\python.exe"
 if not exist "%PY%" set "PY=python.exe"
 
 if not exist "dist\ClevoBacklight.exe" (

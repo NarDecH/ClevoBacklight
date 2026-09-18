@@ -7,7 +7,7 @@ rem ============================================================
 setlocal
 set "HERE=%~dp0"
 set "EXE=%HERE%dist\ClevoBacklight.exe"
-set "PY=C:\opencv\venv312\Scripts\python.exe"
+set "PY=C:\opencv\venv\Scripts\python.exe"
 if not exist "%PY%" set "PY=python.exe"
 
 rem packaged exe -> just start it (it elevates itself via its own .bat flow)

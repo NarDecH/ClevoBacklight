@@ -14,7 +14,7 @@ rem  Run before every exe build. Exit code 0 = all good.
 rem ============================================================
 setlocal
 set "HERE=%~dp0"
-set "PY=C:\opencv\venv312\Scripts\python.exe"
+set "PY=C:\opencv\venv\Scripts\python.exe"
 if not exist "%PY%" set "PY=python.exe"
 set "SMOKE_PORT=8787"
 if not "%~1"=="" set "SMOKE_PORT=%~1"

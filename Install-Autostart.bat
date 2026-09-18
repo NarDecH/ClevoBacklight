@@ -9,7 +9,7 @@ rem  Self-elevates via UAC (double-click and confirm once)
 rem ============================================================
 setlocal
 set "HERE=%~dp0"
-set "PYW=C:\opencv\venv312\Scripts\pythonw.exe"
+set "PYW=C:\opencv\venv\Scripts\pythonw.exe"
 if not exist "%PYW%" set "PYW=pythonw.exe"
 set "EXE=%HERE%dist\ClevoBacklight.exe"
 
