@@ -4,6 +4,7 @@ No EC, no admin, no tray: exercises the health-check helpers against a
 temp status.json, the engine start/stop lifecycle against mock renderers,
 the schedule cursor (wrap-midnight) and the new engine/health validation.
 """
+import hashlib
 import json
 import os
 import sys
@@ -507,7 +508,7 @@ def test_update_download_endpoint(tmp):
     try:
         d = make_daemon(tmp)
         downloads = []
-        d.download_update = lambda url, dest=None: downloads.append(url)
+        d.download_update = lambda url, dest=None, expected_sha256=None: downloads.append(url)
         port = d.start_status_server(port=0)
         srv = d._dash_server
         base = "http://127.0.0.1:%d" % port
@@ -1272,6 +1273,197 @@ def test_v1921_features(tmp):
     print("v1.9.21 features OK (game usage, carry-across, light action + restore)")
 
 
+def test_v1922_features(tmp):
+    """v1.9.22: SHA-256 release verification + backup zip/restore/list API.
+    Offline only — no GitHub, no EC, no admin."""
+    import urllib.request
+    import urllib.error
+    import zipfile as zf
+    status_path = os.path.join(tmp, "status.json")
+    old = (clevo_daemon.STATUS_PATH, clevo_daemon.HISTORY_PATH,
+           clevo_daemon.EVENTS_PATH, clevo_daemon.DAILY_PATH,
+           config.app_base)
+    clevo_daemon.STATUS_PATH = os.path.join(tmp, "status.json")
+    clevo_daemon.HISTORY_PATH = os.path.join(tmp, "history.json")
+    clevo_daemon.EVENTS_PATH = os.path.join(tmp, "events.jsonl")
+    clevo_daemon.DAILY_PATH = os.path.join(tmp, "daily_stats.json")
+    config.app_base = lambda: tmp
+    srv = None
+    try:
+        d = make_daemon(tmp)
+        # live state files for the zips
+        with open(os.path.join(tmp, "settings.json"), "w") as f:
+            json.dump({"brightness": 1}, f)
+        with open(os.path.join(tmp, "history.json"), "w") as f:
+            f.write("[]")
+
+        # ---- 1. checksum: ok / mismatch deletes / unusable digest refuses
+        data = b"fake release zip payload"
+        good = hashlib.sha256(data).hexdigest()
+        zpath = os.path.join(tmp, "rel.zip")
+        with open(zpath, "wb") as f:
+            f.write(data)
+        got = d.verify_release_checksum(zpath, "sha256:" + good)
+        assert got == good, got
+        got = d.verify_release_checksum(zpath, good.upper())
+        assert got == good
+        with open(zpath, "wb") as f:
+            f.write(b"tampered")
+        try:
+            d.verify_release_checksum(zpath, "sha256:" + good)
+            raise AssertionError("mismatch must raise")
+        except ValueError as exc:
+            assert "mismatch" in str(exc), exc
+        try:
+            d.verify_release_checksum(zpath, "md5:abc")
+            raise AssertionError("unusable digest must raise")
+        except ValueError as exc:
+            assert "no usable sha256" in str(exc), exc
+        print("  sha256 verify OK (match/mismatch/unusable)")
+
+        # ---- 2. download_update verifies + deletes tampered files
+        # the downloaded payload hashes differently from the digest the
+        # release metadata advertises -> must be rejected and deleted
+        d.notify = lambda *a, **k: None
+        payload = b"evil payload"
+        evil = hashlib.sha256(payload).hexdigest()
+        captured = {}
+        d.notify = lambda *a, **k: captured.setdefault("n", True)
+        real_urlopen = clevo_daemon.urllib.request.urlopen
+
+        class _R:
+            """urlopen double: one body, then EOF — must terminate or the
+            64 KB download loop never ends (10 GB file lesson)."""
+            def __init__(self, body):
+                self.body = body
+                self.done = False
+            def read(self, n):
+                if self.done:
+                    return b""
+                self.done = True
+                return self.body
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        clevo_daemon.urllib.request.urlopen = \
+            lambda req, timeout=60: _R(payload)
+        try:
+            advertised = hashlib.sha256(b"the real release bytes").hexdigest()
+            assert advertised != evil
+            dest = d.download_update("https://x/rel.zip",
+                                     dest=os.path.join(tmp, "dl.zip"),
+                                     expected_sha256="sha256:" + advertised)
+            assert dest is None, "tampered download must return None"
+            assert not os.path.exists(os.path.join(tmp, "dl.zip")), \
+                "tampered file must be deleted"
+            assert captured.get("n"), "user must be notified of rejection"
+            # matching digest -> file kept
+            dest = d.download_update("https://x/rel.zip",
+                                     dest=os.path.join(tmp, "dl2.zip"),
+                                     expected_sha256="sha256:" + evil)
+            assert dest and os.path.exists(dest), "matching digest -> keep"
+            # no digest advertised -> keep (legacy releases)
+            dest = d.download_update("https://x/rel.zip",
+                                     dest=os.path.join(tmp, "dl3.zip"),
+                                     expected_sha256=None)
+            assert dest and os.path.exists(dest), "no digest -> keep (legacy)"
+        finally:
+            clevo_daemon.urllib.request.urlopen = real_urlopen
+        print("  download_update rejects tampered zip OK")
+
+        # ---- 3. weekly zip + on-demand zip + prune
+        d._weekly_backup()
+        bdir = os.path.join(tmp, "backups")
+        weeks = [f for f in os.listdir(bdir) if f.startswith("week-")]
+        assert len(weeks) == 1 and weeks[0].endswith(".zip"), weeks
+        with zf.ZipFile(os.path.join(bdir, weeks[0])) as z:
+            assert set(z.namelist()) == {"settings.json", "history.json",
+                                         "daily_stats.json"} & set(z.namelist())
+            assert "settings.json" in z.namelist()
+        manual = d._backup_zip_now()
+        assert manual.startswith("manual-") and manual.endswith(".zip"), manual
+        assert os.path.isfile(os.path.join(bdir, manual))
+        print("  weekly + manual zip OK (%s)" % manual)
+
+        # ---- 4. restore: validates stamp, applies settings live
+        try:
+            d.restore_backup("nope-1970-01-01_00-00")
+            raise AssertionError("unknown stamp must raise")
+        except ValueError:
+            pass
+        stamp = d.make_backup()[0].rsplit("__", 1)[0]
+        # simulate a corrupted/edited live settings file (external edit —
+        # the in-memory daemon does not see it until a reload happens)
+        with open(os.path.join(tmp, "settings.json"), "w") as f:
+            json.dump({"brightness": 3, "colors": ["FF0000", "FF0000",
+                                                  "FF0000"]}, f)
+        d.connect = lambda: None                    # no EC in offline tests
+        restored = d.restore_backup(stamp)         # no restart needed
+        assert "settings.json" in restored, restored
+        assert d.settings.get("brightness") == 1, "settings must reload live"
+        assert d._last_backup_day is None
+        print("  live restore (settings reload, no restart) OK")
+
+        # ---- 5. HTTP: GET /api/backups + GET download + POST restore
+        port = d.start_status_server(port=0)
+        srv = d._dash_server
+        base = "http://127.0.0.1:%d" % port
+        with urllib.request.urlopen(base + "/api/backups", timeout=5) as r:
+            listing = json.loads(r.read().decode("utf-8"))
+        stamps = [b["stamp"] for b in listing["backups"]]
+        assert stamp in stamps and manual[:-4] in stamps, listing
+        kinds = {b["stamp"]: b["kind"] for b in listing["backups"]}
+        assert kinds[stamp] == "daily", kinds
+        assert kinds[manual[:-4]] == "manual", kinds
+        assert kinds.get("week-2026-W38") == "weekly", kinds
+        with urllib.request.urlopen(
+                base + "/api/backups/" + urllib.parse.quote(manual),
+                timeout=5) as r:
+            blob = r.read()
+        assert blob[:2] == b"PK" and r.headers.get("Content-Disposition") \
+            and "attachment" in r.headers.get("Content-Disposition", "")
+        try:
+            urllib.request.urlopen(base + "/api/backups/..%2f..%2fsettings.json",
+                                   timeout=5)
+            raise AssertionError("traversal must be rejected")
+        except urllib.error.HTTPError as e:
+            assert e.code in (400, 404), e.code
+        try:
+            urllib.request.urlopen(
+                base + "/api/backups/restore",
+                data=json.dumps({"file": "nope__settings.json"}).encode(),
+                timeout=5)
+            raise AssertionError("unknown stamp must 400")
+        except urllib.error.HTTPError as e:
+            assert e.code == 400, e.code
+        with urllib.request.urlopen(
+                base + "/api/backups/restore",
+                data=json.dumps({"file": stamp + "__settings.json"}).encode(),
+                timeout=5) as r:
+            res = json.loads(r.read().decode("utf-8"))
+        assert res["ok"] and res["stamp"] == stamp, res
+        print("  backups HTTP API OK (list/download/restore/traversal)")
+
+        # ---- 6. remote_command snapshot actions (no EC needed)
+        out = d.remote_command({"action": "backup"})
+        assert out["ok"] and out["files"], out
+        out = d.remote_command({"action": "backup_zip"})
+        assert out["ok"] and out["file"].endswith(".zip"), out
+        print("  remote_command backup/backup_zip OK")
+    finally:
+        clevo_daemon.STATUS_PATH, clevo_daemon.HISTORY_PATH, \
+            clevo_daemon.EVENTS_PATH, clevo_daemon.DAILY_PATH, \
+            config.app_base = old
+        if srv is not None:
+            try:
+                srv.shutdown()
+                srv.server_close()
+            except Exception:
+                pass
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="clevo_test_")
     test_health_check_roundtrip(tmp)
@@ -1308,6 +1500,7 @@ def main():
     test_settings_bom_tolerant(tmp)
     test_v1920_features(tmp)
     test_v1921_features(tmp)
+    test_v1922_features(tmp)
     print("ALL CONFIG/DAEMON MIXIN TESTS PASSED")
 
 

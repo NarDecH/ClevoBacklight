@@ -143,6 +143,12 @@
 </div>
 
 <div class="panel">
+  <h2>สำรอง & กู้คืน (รายวันอัตโนมัติ · zip รายสัปดาห์) <a class="chip" id="bkZip" href="#">⬇ ดาวน์โหลด zip</a> <a class="chip" id="bkNow" href="#">สำรองเดี๋ยวนี้</a></h2>
+  <div id="bkMsg" class="row" style="margin-bottom:8px"><span class="chip">—</span></div>
+  <table id="bkTable"><tr><th>ชุดข้อมูล</th><th>ชนิด</th><th>ขนาด</th><th>จัดการ</th></tr></table>
+</div>
+
+<div class="panel">
   <h2>เหตุการณ์ทั้งหมด (events.jsonl) <a class="chip" id="evDl" href="/api/events.jsonl" download="events.jsonl">⬇ ดาวน์โหลด</a></h2>
   <div class="row" style="margin-bottom:8px">
     <select id="evKind" class="chip">
@@ -481,6 +487,52 @@ function checkUpdate(){
     }).catch(() => {});
 }
 checkUpdate(); setInterval(checkUpdate, 3600000);
+
+// ---------- backups: list + download + restore (v1.9.22) ----------
+const qs = new URLSearchParams(location.search);
+const tokQs = qs.get('token') ? ('?token=' + encodeURIComponent(qs.get('token'))) : '';
+async function loadBackups(){
+  try{
+    const j = await (await fetch('/api/backups' + location.search, {cache:'no-store'})).json();
+    const rows = (j.backups || []).map(b =>
+      '<tr><td>' + esc(b.stamp) + '</td><td>' + (b.kind==='weekly' ? '📅 รายสัปดาห์ (zip)' : '🗓 รายวัน') + '</td><td>'
+      + (b.size/1024).toFixed(0) + ' KB</td><td>'
+      + (b.kind==='daily' ? '<a class="chip" href="#" onclick="restoreBackup(\'' + esc(b.file) + '\');return false">กู้คืน</a>'
+                          : '<a class="chip" href="/api/backups/' + encodeURIComponent(b.file) + tokQs + '" download="' + esc(b.file) + '">ดาวน์โหลด</a>')
+      + '</td></tr>').join('');
+    $('bkTable').innerHTML = '<tr><th>ชุดข้อมูล</th><th>ชนิด</th><th>ขนาด</th><th>จัดการ</th></tr>'
+      + (rows || '<tr><td colspan=4 style="color:var(--mut)">ยังไม่มีชุดสำรอง — จะสร้างเองตอนเปลี่ยนวัน</td></tr>');
+  }catch(e){ $('bkMsg').innerHTML = '<span class="chip" style="color:var(--bad)">โหลดรายการสำรองไม่ได้</span>'; }
+}
+async function restoreBackup(file){
+  if (!confirm('กู้คืนตั้งค่า + ประวัติจากชุด ' + file + ' ? (ตั้งค่าปัจจุบันจะถูกแทน)')) return;
+  $('bkMsg').innerHTML = '<span class="chip">กำลังกู้คืน…</span>';
+  try{
+    const r = await fetch('/api/backups/restore' + location.search, {method:'POST', cache:'no-store',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({file: file})});
+    const j = await r.json();
+    if (r.ok){ $('bkMsg').innerHTML = '<span class="chip" style="color:var(--acc)">✓ กู้คืนแล้ว (' + esc(j.stamp) + ') — โหลดหน้าใหม่เพื่อเห็นค่าใหม่</span>'; loadBackups(); }
+    else $('bkMsg').innerHTML = '<span class="chip" style="color:var(--bad)">✗ ' + esc(j.error || ('HTTP ' + r.status)) + '</span>';
+  }catch(e){ $('bkMsg').innerHTML = '<span class="chip" style="color:var(--bad)">✗ เชื่อมต่อไม่ได้</span>'; }
+}
+loadBackups(); setInterval(loadBackups, 60000);
+$('bkNow').onclick = (ev) => { ev.preventDefault();
+  fetch('/api/cmd' + location.search, {method:'POST', cache:'no-store',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'backup'})})
+    .then(r => r.json()).then(j => {
+      $('bkMsg').innerHTML = j.ok ? '<span class="chip" style="color:var(--acc)">✓ สำรองแล้ว</span>'
+                                  : '<span class="chip" style="color:var(--bad)">✗ ' + esc(j.error || 'สำรองไม่สำเร็จ') + '</span>';
+      loadBackups();
+    }).catch(() => { $('bkMsg').innerHTML = '<span class="chip" style="color:var(--bad)">✗ เชื่อมต่อไม่ได้</span>'; });
+};
+$('bkZip').onclick = (ev) => { ev.preventDefault();
+  fetch('/api/cmd' + location.search, {method:'POST', cache:'no-store',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'backup_zip'})})
+    .then(r => r.json()).then(j => {
+      if (j.ok && j.file){ location.href = '/api/backups/' + encodeURIComponent(j.file) + tokQs; $('bkMsg').innerHTML = '<span class="chip" style="color:var(--acc)">✓ สร้าง zip แล้ว — เริ่มดาวน์โหลด</span>'; loadBackups(); }
+      else $('bkMsg').innerHTML = '<span class="chip" style="color:var(--bad)">✗ ' + esc(j.error || 'สร้าง zip ไม่สำเร็จ') + '</span>';
+    }).catch(() => { $('bkMsg').innerHTML = '<span class="chip" style="color:var(--bad)">✗ เชื่อมต่อไม่ได้</span>'; });
+};
 
 let vizHistory = [];
 function drawViz(d){

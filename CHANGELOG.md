@@ -2,6 +2,19 @@
 
 รูปแบบอ้างอิง [Keep a Changelog](https://keepachangelog.com/) — เวอร์ชันตามเสถียรภาพของฟีเจอร์ (ไม่มี release สาธารณะ ใช้ภายในเครื่อง)
 
+## [1.9.22] — 2026-09-19
+
+### Added
+- **ตรวจสอบความสมบูรณ์ของ release ด้วย SHA-256** — CI เขียน `SHA256SUMS.txt` (hash ของ zip + Setup) แนบในทุก release · `check_for_update()` อ่าน `digest` จาก GitHub API · `download_update()` **ตรวจไฟล์ก่อนใช้เสมอ** — ไม่ตรง = ลบทิ้ง + toast/notify เตือน + event `download_rejected` (ไฟล์ tampered ไม่มีทางหลุดไปอยู่ข้าง exe) · release เก่าที่ไม่มี digest ยังใช้ได้เหมือนเดิม
+- **สำรอง & กู้คืนบน Dashboard** — zip รายสัปดาห์อัตโนมัติ (`week-<ISO>.zip` เก็บ 4 สัปดาห์ — settings + history + daily_stats) · daily backup เดิมขยายครอบ `daily_stats.json` · ปุ่ม "⬇ ดาวน์โหลด zip" (สร้าง manual zip ทันที — เก็บ 2 ชุด) · แผงรายการชุดสำรองพร้อม **ปุ่มกู้คืน** — `restore_backup()` อัปเกรด: settings reload ผ่าน loader ปกติ (normalize + config_ok) แล้วดันโปรไฟล์ active กลับเข้าไฟ **โดยไม่ต้องรีสตาร์ท** + history/daily โหลดกลับ live · API: `GET /api/backups` (list) · `GET /api/backups/<file>` (ดาวน์โหลด — กัน traversal/จำกัดชนิดไฟล์) · `POST /api/backups/restore` (validate stamp ก่อนเสมอ) · action `backup`/`backup_zip` บน `/api/cmd`
+- **Toolchain guard ใน Build-Exe.bat** (บทเรียน venv312 หายเงียบ ๆ วันที่ 19) — python ไม่เจอ / PyInstaller ไม่มี = **fail ดัง ๆ พร้อมวิธีแก้** แทน fallback ไป `python.exe` ที่ไม่มีจริง
+
+### Fixed
+- `Settings.reload()` ใหม่ — re-read settings.json ผ่าน normalizing path เดียวกับตอนสตาร์ท (ใช้โดย restore)
+
+### Tests
+- `test_v1922_features` — checksum (match/mismatch/digest ใช้ไม่ได้) · download tampered → ไฟล์ถูกลบ + แจ้งเตือน (fake urlopen แบบ one-shot — **จับบั๊กของตัว test เอง: read ที่ไม่มี EOF ทำไฟล์โต 10.6 GB จน timeout**) · weekly/manual zip + prune · restore ไม่รู้จัก stamp → ValueError · restore สด: settings reload จริง + history/daily กลับ · HTTP API ครบ (list/download/restore/ปัด traversal) · action backup ไม่แตะ EC
+
 ## [1.9.21] — 2026-09-18
 
 ### Added

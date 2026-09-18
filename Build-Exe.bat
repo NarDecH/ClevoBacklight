@@ -8,6 +8,21 @@ cd /d "%~dp0"
 set "PY=C:\opencv\venv\Scripts\python.exe"
 if not exist "%PY%" set "PY=python.exe"
 
+rem  v1.9.22 toolchain guard: the venv312 incident (2026-09-19) proved a
+rem  missing python/PyInstaller fails SILENTLY via the fallback above —
+rem  fail loudly instead.
+if not exist "%PY%" (
+    echo [TOOLCHAIN] python not found: %PY%
+    echo [TOOLCHAIN] install Python 3.12 + pyinstaller, or fix Build-Exe.bat
+    exit /b 1
+)
+"%PY%" -c "import PyInstaller" 2>nul
+if errorlevel 1 (
+    echo [TOOLCHAIN] PyInstaller missing in %PY%
+    echo [TOOLCHAIN] run: "%PY%" -m pip install pyinstaller
+    exit /b 1
+)
+
 rem  never build from a red state: run every offline check first
 call "%~dp0test_all.bat"
 if errorlevel 1 (

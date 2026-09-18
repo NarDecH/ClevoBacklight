@@ -349,12 +349,18 @@ rest_command:
 
 ## สำรอง / กู้คืนข้อมูล
 
-daemon สำรอง `settings.json` + `history.json` ไป `backups/` **วันละ 1 ชุดอัตโนมัติ** เก็บย้อนหลัง 7 ชุด:
+daemon สำรอง `settings.json` + `history.json` + `daily_stats.json` ไป `backups/` **วันละ 1 ชุดอัตโนมัติ** เก็บย้อนหลัง 7 ชุด + **zip รายสัปดาห์** (`week-<ISO>.zip` เก็บ 4 สัปดาห์) — จัดการได้จากแผง **สำรอง & กู้คืน** บน Dashboard: ดูรายการ · ดาวน์โหลด zip · ปุ่ม "สำรองเดี๋ยวนี้" · **กู้คืนแบบไม่ต้องรีสตาร์ท** (settings reload ผ่าน loader ปกติ แล้วดันโปรไฟล์ active กลับเข้าไฟเอง)
 
 ```powershell
 python clevo_ec.py --list-backups            # ดู stamp ที่มี
-python clevo_ec.py --restore-backup 2026-09-17_12-00   # กู้คืน (มีผลหลังรีสตาร์ท daemon)
+python clevo_ec.py --restore-backup 2026-09-17_12-00   # กู้คืน (มีผลทันทีตั้งแต่ v1.9.22)
 ```
+
+API: `GET /api/backups` (list) · `GET /api/backups/<file>` (ดาวน์โหลด) · `POST /api/backups/restore {"file":"<stamp>__settings.json"}`
+
+## ความสมบูรณ์ของ release (v1.9.22)
+
+ทุก release แนบ `SHA256SUMS.txt` (CI สร้างจาก zip + Setup) · daemon อ่าน `digest` จาก GitHub API แล้ว**ตรวจไฟล์ที่ดาวน์โหลดก่อนใช้เสมอ** — ไม่ผ่าน = ลบทิ้ง + toast เตือน + event `download_rejected` (release เก่าที่ไม่มี digest ยังใช้ได้เหมือนเดิม)
 
 ## CLI — คำสั่งทั้งหมด
 

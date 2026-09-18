@@ -76,6 +76,7 @@
   <a href="#s13">13 Win32 access mask</a>
   <a href="#s14">14 observability</a>
   <a href="#s15">15 usage+DIY API</a>
+  <a href="#s16">16 checksum+backup</a>
 </div></nav>
 
 <div class="wrap">
@@ -312,7 +313,21 @@
   <p><b>บั๊กระหว่างทำ:</b> แทรก <code>HEX_RE</code> ทับท้าย CSV_HEADERS (IndentationError — compile gate จับ) · make_daemon ลืม <code>_game_*</code> attrs (บทเรียนซ้ำหัวข้อ 14) · usage โดน re-aggregate ทับ (test ออกแบบให้จับ)</p>
 </section>
 
-<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.21) · ความปลอดภัย: SECURITY.md</footer>
+<section id="s16">
+  <h2><span class="no">16</span> ความสมบูรณ์ของ release + การสำรองแบบกู้คืนได้จริง (v1.9.22)</h2>
+  <table>
+    <tr><th>การตัดสินใจ</th><th>เหตุผล</th></tr>
+    <tr><td>SHA-256 จาก GitHub API <code>digest</code> · CI เขียน SHA256SUMS.txt แนบ release</td><td>ตรวจข้ามแหล่งกับสิ่งที่ CI สร้าง · ไฟล์ checksum แยกสำหรับคนดาวน์โหลดด้วยมือ · รองรับทั้ง <code>sha256:&lt;hex&gt;</code> และ bare hex</td></tr>
+    <tr><td>ไม่ผ่าน = <b>ลบทิ้ง + toast + event</b> (ไม่ retry/ไม่เก็บไว้)</td><td>ไฟล์ที่ checksum ไม่ผ่านไม่มีเหตุผลอันใดควรอยู่ข้าง exe — เรียนรู้จาก silent fallback 2 ครั้ง (1.9.18, 1.9.19): คราวนี้ "ผิดแล้วดัง"</td></tr>
+    <tr><td>release เก่าไม่มี digest = ผ่าน</td><td>ยากขึ้นต้องไม่ทำให้เสียพฤติกรรมเดิม</td></tr>
+    <tr><td>กู้คืน = คัดลอก → reload ผ่าน loader ปกติ → ดัน active profile กลับเข้าไฟ</td><td>reload ผ่าน <code>Settings._load()</code> เดิมได้ normalize + transparency ฟรี (ไฟล์ restore พัง = defaults + <code>config_ok:false</code> ที่มองเห็น) · ไม่ต้องรีสตาร์ท</td></tr>
+    <tr><td>validate stamp ระดับ domain (method เดียว) ไม่ใช่แค่ HTTP</td><td>CLI/GUI/API เรียก method เดียวกัน — กันพลาดทุกทางเข้า</td></tr>
+    <tr><td>weekly zip = state เท่านั้น (ไม่รวม events.jsonl)</td><td>events คือ log ตรวจสอบ — restore ย้อน "ตั้งค่า+สถิติ" ไม่ใช่ลบประวัติความผิดปกติ</td></tr>
+  </table>
+  <p class="bad"><b>บั๊กที่ test จับ:</b> fake <code>urlopen</code> ไม่มี EOF → <code>download_update</code> เขียนไฟล์โต <b>10.6 GB</b> จน disk หน่วง — บทเรียนซ้ำหัวข้อ 13: mock ต้องเหมือนจริง (มี EOF) และข้อมูลที่ยังไม่ validate เขียนดิสก์จริงก่อนถูกตัดสิน</p>
+</section>
+
+<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-19 (v1.9.22) · ความปลอดภัย: SECURITY.md</footer>
 </div>
 </body>
 </html>

@@ -49,6 +49,19 @@ jobs:
           echo Building version %VER%
           "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DMyAppVersion=%VER% installer.iss
           release.bat %VER%
+      - name: Write SHA256SUMS.txt (v1.9.22 integrity)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $ver = (Get-Content CHANGELOG.md -TotalCount 10 | Select-String '## \[(\d+\.\d+\.\d+)\]').Matches[0].Groups[1].Value
+          $files = @("ClevoBacklight-v$ver.zip", "dist\ClevoBacklight-Setup-$ver.exe") |
+            Where-Object { Test-Path $_ }
+          $lines = $files | ForEach-Object {
+            $h = (Get-FileHash $_ -Algorithm SHA256).Hash.ToLower()
+            "$h  $(Split-Path $_ -Leaf)"
+          }
+          $lines | Set-Content SHA256SUMS.txt
+          Get-Content SHA256SUMS.txt
 
       - name: Upload build artifact (non-tag runs)
         if: "!startsWith(github.ref, 'refs/tags/v')"
@@ -63,5 +76,6 @@ jobs:
         with:
           files: |
             ClevoBacklight-v*.zip
+            SHA256SUMS.txt
             dist/ClevoBacklight-Setup-*.exe
           generate_release_notes: true

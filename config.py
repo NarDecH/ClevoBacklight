@@ -105,7 +105,7 @@ DEFAULTS = {
     "updates": {"enabled": False, "repo": "NarDecH/ClevoBacklight", "interval_s": 21600},
 }
 
-APP_VERSION = "1.9.21"
+APP_VERSION = "1.9.22"
 
 MODES = ["custom", "breathe", "cycle", "random", "dance", "tempo", "flash", "wave"]
 
@@ -451,6 +451,14 @@ class Settings:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self.data, f, indent=2, ensure_ascii=False)
             os.replace(tmp, self.path)
+
+    def reload(self):
+        """Re-read settings.json from disk (v1.9.22: backup restore).
+        Goes through the same normalization + transparency path as startup,
+        so a restored file that is off gets visibly normalized instead of
+        silently trusted."""
+        with self.lock:
+            self.data = self._load()
 
     # ---- normalization helpers ----
     @staticmethod

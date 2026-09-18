@@ -21,6 +21,7 @@ Run:  pythonw clevo_daemon.py        (no console window)
 """
 import ctypes
 import datetime
+import hashlib
 import json
 import os
 import subprocess
@@ -28,6 +29,7 @@ import sys
 import threading
 import time
 import re
+import zipfile
 from ctypes import wintypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import urllib.request
@@ -102,6 +104,8 @@ HISTORY_MAX = 720                       # samples kept in RAM + history.json
 DAILY_PATH = os.path.join(config.app_base(), "daily_stats.json")
 DAILY_MAX = 60                          # days of aggregate stats kept on disk
 BACKUP_KEEP = 7                         # datestamped backup sets kept on disk
+WEEKLY_KEEP = 4                         # weekly zip restore points kept on disk
+MANUAL_ZIP_KEEP = 2                     # on-demand zips (Dashboard button)
 EVENTS_PATH = os.path.join(config.app_base(), "events.jsonl")
 EVENTS_MAX = 5000                       # JSONL lines kept (file is trimmed on rotate)
 
@@ -434,19 +438,26 @@ class Daemon:
             data = json.load(resp)
         latest = str(data.get("tag_name") or "").lstrip("v")
         asset_url = None
+        asset_name = None
+        asset_sha = None
         for a in data.get("assets") or []:
             if str(a.get("name", "")).lower().endswith(".zip"):
                 asset_url = a.get("browser_download_url")
+                asset_name = a.get("name")
+                asset_sha = a.get("digest")
                 break
         avail = bool(latest and latest != config.APP_VERSION)
         return {"update_available": avail, "latest": latest or None,
                 "current": config.APP_VERSION, "url": asset_url or
-                data.get("html_url"), "repo": repo}
+                data.get("html_url"), "repo": repo,
+                "asset": asset_name or None,
+                "sha256": asset_sha or None}
 
-    def download_update(self, url, dest=None):
+    def download_update(self, url, dest=None, expected_sha256=None):
         """Download the release asset next to the exe (no install — the user
-        still runs it). Returns the file path. Never overwrites silently:
-        adds a timestamp suffix if the file already exists."""
+        still runs it). Returns the file path, or None when the file failed
+        the release checksum and was deleted (v1.9.22). Never overwrites
+        silently: adds a timestamp suffix if the file already exists."""
         if not url or not url.startswith(("http://", "https://")):
             raise ValueError("invalid url")
         dest = dest or os.path.join(config.app_base(),
@@ -464,8 +475,54 @@ class Daemon:
                 if not chunk:
                     break
                 f.write(chunk)
+        if expected_sha256:
+            try:
+                self.verify_release_checksum(dest, expected_sha256)
+                elog(EV_UPDATE, action="download_verified",
+                     file=os.path.basename(dest))
+            except ValueError as exc:
+                try:
+                    os.remove(dest)
+                except OSError:
+                    pass
+                elog(EV_UPDATE, action="download_rejected", url=url,
+                     error=str(exc))
+                self.notify("update",
+                            "Clevo Backlight: ดาวน์โหลดไม่ผ่านการตรวจ",
+                            "ไฟล์ถูกลบ (SHA-256 ไม่ตรงกับ release) — "
+                            "ลองดาวน์โหลดจากหน้า Release อีกครั้ง")
+                return None
         elog(EV_UPDATE, action="downloaded", url=url, file=os.path.basename(dest))
         return dest
+
+    @staticmethod
+    def sha256_file(path, chunk=1 << 20):
+        """SHA-256 of a file, streamed (v1.9.22: release integrity checks)."""
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            while True:
+                b = f.read(chunk)
+                if not b:
+                    break
+                h.update(b)
+        return h.hexdigest()
+
+    def verify_release_checksum(self, zip_path, expected):
+        """Verify a downloaded release zip against the release's SHA-256.
+        `expected` is the GitHub digest form ("sha256:<hex>") or a bare hex
+        string; returns the computed hex digest. Raises ValueError on
+        mismatch or unusable expected value — the caller must NOT keep a
+        file that failed verification."""
+        got = self.sha256_file(zip_path)
+        want = str(expected or "").strip().lower()
+        if want.startswith("sha256:"):
+            want = want.split(":", 1)[1]
+        if not re.fullmatch(r"[0-9a-f]{64}", want):
+            raise ValueError("release has no usable sha256 (digest=%r)"
+                             % expected)
+        if got != want:
+            raise ValueError("checksum mismatch: got %s want %s" % (got, want))
+        return got
 
     def _updates_loop(self):
         """Periodically check GitHub releases and toast + log when newer."""
@@ -496,6 +553,7 @@ class Daemon:
         prev = self._last_backup_day
         copied = self.make_backup()
         self._last_backup_day = today
+        self._weekly_backup()
         if copied:
             log("backup: %s" % ", ".join(copied))
         # daily Discord/Telegram summary for the day that just ended
@@ -958,6 +1016,12 @@ class Daemon:
         # MUST be called before entering `with self.lock` here — nesting them
         # deadlocks the calling thread and freezes every other EC user
         # (health loop, watchdog, further /api/cmd POSTs) forever.
+        if action == "backup":
+            # state snapshot (no EC involved) — safe before connect()
+            return {"ok": True, "action": action, "files": self.make_backup()}
+        if action == "backup_zip":
+            return {"ok": True, "action": action,
+                    "file": self._backup_zip_now()}
         kb = self.connect()
         with self.lock:
             if action == "power":
@@ -1043,6 +1107,64 @@ class Daemon:
         self._update_tray()
         return {"ok": True, "action": action}
 
+    def _weekly_backup(self):
+        """One zip per ISO week (checked on every health tick, v1.9.22).
+        Full state set: settings + history + daily_stats. Zips older than
+        WEEKLY_KEEP are pruned — a month of restore points without growing
+        the disk forever."""
+        stamp = "week-%s" % datetime.date.today().strftime("%G-W%V")
+        bdir = os.path.join(config.app_base(), "backups")
+        zpath = os.path.join(bdir, stamp + ".zip")
+        if os.path.isfile(zpath):
+            return
+        os.makedirs(bdir, exist_ok=True)
+        tmp = zpath + ".tmp"
+        try:
+            with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
+                for name in ("settings.json", "history.json", "daily_stats.json"):
+                    src = os.path.join(config.app_base(), name)
+                    if os.path.isfile(src):
+                        z.write(src, arcname=name)
+            os.replace(tmp, zpath)
+            log("weekly backup: %s" % os.path.basename(zpath))
+            elog(EV_UPDATE, action="weekly_backup", file=os.path.basename(zpath))
+        except OSError:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        stamps = [f[:-4] for f in os.listdir(bdir)
+                  if f.startswith("week-") and f.endswith(".zip")]
+        for old in sorted(stamps)[:-WEEKLY_KEEP]:
+            try:
+                os.remove(os.path.join(bdir, old + ".zip"))
+            except OSError:
+                pass
+
+    def _backup_zip_now(self):
+        """On-demand state zip (Dashboard ⬇ ดาวน์โหลด zip, v1.9.22).
+        manual- prefix so it never collides with the weekly schedule; keep
+        only the newest MANUAL_ZIP_KEEP."""
+        bdir = os.path.join(config.app_base(), "backups")
+        os.makedirs(bdir, exist_ok=True)
+        stamp = "manual-" + config.human_now().replace(":", "-") \
+            .replace(" ", "_")[:13]
+        zpath = os.path.join(bdir, stamp + ".zip")
+        with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+            for name in ("settings.json", "history.json", "daily_stats.json"):
+                src = os.path.join(config.app_base(), name)
+                if os.path.isfile(src):
+                    z.write(src, arcname=name)
+        stamps = [f[:-4] for f in os.listdir(bdir)
+                  if f.startswith("manual-") and f.endswith(".zip")]
+        for old in sorted(stamps)[:-MANUAL_ZIP_KEEP]:
+            try:
+                os.remove(os.path.join(bdir, old + ".zip"))
+            except OSError:
+                pass
+        elog(EV_UPDATE, action="manual_backup", file=os.path.basename(zpath))
+        return os.path.basename(zpath)
+
     # ---------- daily backups (settings + history, keep 7) ----------
     def make_backup(self):
         """Copy settings.json + history.json into backups/ (datestamped)."""
@@ -1050,7 +1172,7 @@ class Daemon:
         os.makedirs(bdir, exist_ok=True)
         stamp = config.human_now().replace(":", "-").replace(" ", "_")[:13]
         copied = []
-        for name in ("settings.json", "history.json"):
+        for name in ("settings.json", "history.json", "daily_stats.json"):
             src = os.path.join(config.app_base(), name)
             if os.path.isfile(src):
                 dst = os.path.join(bdir, "%s__%s" % (stamp, name))
@@ -1090,12 +1212,14 @@ class Daemon:
         return sorted(stamps)
 
     def restore_backup(self, stamp):
-        """Copy a backup stamp's files back over the live ones (settings.json
-        takes effect on next daemon restart)."""
+        """Copy a backup stamp's files back over the live ones. v1.9.22:
+        live daemon applies them immediately — settings are reloaded through
+        the normalizing loader and the active profile is re-pushed to the
+        EC, so no restart is needed."""
         if stamp not in self.list_backups():
             raise ValueError("no backup %r" % stamp)
         restored = []
-        for name in ("settings.json", "history.json"):
+        for name in ("settings.json", "history.json", "daily_stats.json"):
             for root in self._backup_dirs():
                 src = os.path.join(root, "backups", "%s__%s" % (stamp, name))
                 if os.path.isfile(src):
@@ -1104,6 +1228,38 @@ class Daemon:
                         fo.write(fi.read())
                     restored.append(name)
                     break
+        # ---- live-apply (best effort per file: a broken history file must
+        # not stop the settings restore) ----
+        self._last_backup_day = None         # let today's backup re-run
+        if "settings.json" in restored:
+            self.settings.reload()
+        if "history.json" in restored:
+            try:
+                with open(HISTORY_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, list):
+                    with self._hist_lock:
+                        self._history = [s for s in data
+                                         if isinstance(s, dict)][-HISTORY_MAX:]
+            except (OSError, ValueError):
+                pass
+        if "daily_stats.json" in restored:
+            try:
+                with open(DAILY_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, list):
+                    self._daily = [s for s in data
+                                   if isinstance(s, dict)][-DAILY_MAX:]
+            except (OSError, ValueError):
+                pass
+        if "settings.json" in restored:
+            try:
+                config.apply_profile(self.connect(), self.settings,
+                                     str(self.settings.get("active_profile")
+                                         or ""))
+            except Exception:
+                pass                          # unknown/fresh profile — skip EC
+            elog(EV_SETTING, action="backup_restored", stamp=stamp)
         return restored
 
     # ---------- weekly aggregates + hot hour ----------
@@ -1253,6 +1409,37 @@ class Daemon:
                 if not self._authed():
                     self._json_error(401, "unauthorized")
                     return
+                if path == "/api/backups/restore":
+                    """Restore one backup set (settings+history+daily) from
+                    backups/ — the file must be one this daemon made (the
+                    stamp-prefixed name is validated server-side)."""
+                    try:
+                        length = int(self.headers.get("Content-Length", 0) or 0)
+                        payload = json.loads(self.rfile.read(length) or b"{}")
+                    except ValueError:
+                        self._json_error(400, "bad json")
+                        return
+                    f = str(payload.get("file") or "")
+                    stamp = f[:-len("__settings.json")] \
+                        if f.endswith("__settings.json") else f
+                    try:
+                        restored = daemon.restore_backup(stamp)
+                    except ValueError as exc:
+                        self._json_error(400, str(exc))
+                        return
+                    except Exception as exc:
+                        self._json_error(500, "restore failed: %s" % exc)
+                        return
+                    body = json.dumps(
+                        {"ok": True, "stamp": stamp, "restored": restored},
+                        ensure_ascii=False).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type",
+                                     "application/json; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 if path == "/api/notify-test":
                     try:
                         length = int(self.headers.get("Content-Length", 0) or 0)
@@ -1290,10 +1477,13 @@ class Daemon:
                     if not url:
                         self._json_error(502, "release has no download url")
                         return
+                    expected = info.get("sha256")
                     threading.Thread(target=daemon.download_update,
-                                     args=(url,), daemon=True).start()
+                                     args=(url,), daemon=True,
+                                     kwargs={"expected_sha256": expected}).start()
                     elog(EV_UPDATE, action="download_requested", url=url)
                     body = json.dumps({"ok": True, "url": url,
+                                       "sha256": info.get("sha256"),
                                        "latest": info.get("latest")}).encode("utf-8")
                     self.send_response(200)
                     self.send_header("Content-Type",
@@ -1529,6 +1719,67 @@ class Daemon:
                     body = json.dumps({"summary": daemon.weekly_summary(4),
                                        "hot_hour": daemon.hot_hour()}).encode("utf-8")
                     ctype = "application/json; charset=utf-8"
+                elif path == "/api/backups":
+                    bdir = os.path.join(config.app_base(), "backups")
+                    items = []
+                    if os.path.isdir(bdir):
+                        for f in sorted(os.listdir(bdir), reverse=True):
+                            full = os.path.join(bdir, f)
+                            if not os.path.isfile(full):
+                                continue
+                            stamp = None
+                            if f.endswith(".zip") and f.startswith("week-"):
+                                kind = "weekly"
+                                stamp = f[:-4]
+                            elif f.endswith(".zip") and f.startswith("manual-"):
+                                kind = "manual"
+                                stamp = f[:-4]
+                            elif f.endswith("__settings.json"):
+                                kind = "daily"
+                                stamp = f[:-len("__settings.json")]
+                            else:
+                                continue
+                            items.append({"stamp": stamp, "kind": kind,
+                                          "file": f, "size": os.path.getsize(full)})
+                    body = json.dumps({"backups": items[:12]},
+                                      ensure_ascii=False).encode("utf-8")
+                    ctype = "application/json; charset=utf-8"
+                elif path.startswith("/api/backups/"):
+                    """Download one backup file from backups/ (v1.9.22) —
+                    same protections as restore: the name must be a plain
+                    file name that exists in the daemon's own backups dir."""
+                    if not cfg.get("serve_history_csv", True):
+                        self.send_error(404)
+                        return
+                    name = urllib_parse.unquote(path[len("/api/backups/"):])
+                    if (not name or "/" in name or "\\" in name or ".." in name
+                            or not (name.endswith(".zip")
+                                    or name.endswith("__settings.json")
+                                    or name.endswith("__history.json")
+                                    or name.endswith("__daily_stats.json"))):
+                        self.send_error(400)
+                        return
+                    fpath = os.path.join(config.app_base(), "backups", name)
+                    if not os.path.isfile(fpath):
+                        self.send_error(404)
+                        return
+                    try:
+                        with open(fpath, "rb") as fh:
+                            body = fh.read()
+                    except OSError:
+                        self.send_error(404)
+                        return
+                    ctype = ("application/zip" if name.endswith(".zip")
+                             else "application/json; charset=utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Content-Disposition",
+                                     "attachment; filename=\"%s\"" % name)
+                    self.send_header("Content-Length", str(len(body)))
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 else:
                     self.send_error(404)
                     return
