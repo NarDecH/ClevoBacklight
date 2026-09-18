@@ -282,9 +282,10 @@
     <tr><td><code>QueryFullProcessImageNameW</code></td><td>ชื่อ path ได้ทันที unprivileged ✓ (ทางแก้ — ออกแบบมาสำหรับ mask นี้)</td></tr>
   </table>
   <p><b>บทเรียน:</b> ① ฟังก์ชันที่ try/except แล้วคืน "" กลืน failure ทั้ง test และ field — คอมไพล์ผ่าน ≠ ทำงาน ② differential probe ทีละ call + GetLastError หาสาเหตุได้รอบเดียว ③ ฟีเจอร์ที่แตะ OS boundary ต้องผ่าน <b>live e2e</b> ก่อนประกาศเสร็จ (mock ไม่มีทางจับ mismatch ระดับ access mask) — บทเรียนซ้ำจาก deadlock v1.9.13: <i>ของที่ยังไม่เคยรันจริง = ยังไม่เสร็จ</i></p>
+  <p><b>⑤ บั๊กพี่น้อง v1.9.19 (จับได้ในวันเดียวกัน):</b> PowerShell เขียน settings.json แบบ UTF-8 <b>มี BOM</b> → loader ใช้ <code>utf-8</code> เปลี่ยน <code>\ufeff</code> เป็นชื่อ key แรก → settings ฟอลแบ็ก defaults <b>เงียบ ๆ</b> (token หาย = dashboard ไม่มี auth — smoke assert 401 ได้ 200 เลยจับได้ทันที) · แก้ loader เป็น <code>utf-8-sig</code> + regression test — บทเรียน: silent fallback ต้องออกแบบให้ "ผิดแล้วมองเห็น"</p>
 </section>
 
-<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.18) · ความปลอดภัย: SECURITY.md</footer>
+<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.19) · ความปลอดภัย: SECURITY.md</footer>
 </div>
 </body>
 </html>

@@ -2,6 +2,15 @@
 
 รูปแบบอ้างอิง [Keep a Changelog](https://keepachangelog.com/) — เวอร์ชันตามเสถียรภาพของฟีเจอร์ (ไม่มี release สาธารณะ ใช้ภายในเครื่อง)
 
+## [1.9.19] — 2026-09-18
+
+### Fixed
+- **Settings loader ทน BOM** — จากอุบัติเหตุจริงระหว่างสลับ daemon v1.9.18: สคริปต์ PowerShell (`Set-Content -Encoding UTF8`) เขียน settings.json แบบ **UTF-8 มี BOM** → `Settings._load` ใช้ `encoding="utf-8"` เปลี่ยน `\ufeff` เป็นส่วนของชื่อ key แรก → ทุกค่า user หาย → ฟอลแบ็ก defaults **เงียบ ๆ** (dashboard ไร้ token = 200 ไม่มี auth · โปรไฟล์/กฎหายจาก API) จับได้จาก smoke test ที่ผิดจาก 401 → 200 — แก้เป็น `utf-8-sig` (อ่านได้ทั้งมี/ไม่มี BOM) + regression test `test_settings_bom_tolerant`
+- บทเรียน: silent-fallback ของ config loader กลืนความเสียหายทั้งชั้น — ต่อจาก v1.9.18 ที่ `foreground_exe` กลืน failure เป็น "" (สองเคสติดกัน: ค่า default ปลอดภัยกว่า crash แต่ต้องมีทางให้ผิด **มองเห็น**)
+
+### Changed
+- swap/เขียน settings.json จากสคริปต์ภายนอกต้องไม่มี BOM (loader ทนแล้ว แต่เครื่องมืออื่น เช่น git diff/ตัว merge ยังชอบไฟล์ BOM-free)
+
 ## [1.9.18] — 2026-09-18
 
 ### Fixed

@@ -104,7 +104,7 @@ DEFAULTS = {
     "updates": {"enabled": False, "repo": "NarDecH/ClevoBacklight", "interval_s": 21600},
 }
 
-APP_VERSION = "1.9.18"
+APP_VERSION = "1.9.19"
 
 MODES = ["custom", "breathe", "cycle", "random", "dance", "tempo", "flash", "wave"]
 
@@ -165,7 +165,10 @@ class Settings:
     def _load(self):
         merged = json.loads(json.dumps(DEFAULTS))       # deep copy of defaults
         try:
-            with open(self.path, "r", encoding="utf-8") as f:
+            # utf-8-sig: tolerate a UTF-8 BOM (PowerShell Set-Content / Notepad
+            # writes one) — plain utf-8 would keep \ufeff in the first key name
+            # and silently fall back to defaults (seen live 2026-09-18)
+            with open(self.path, "r", encoding="utf-8-sig") as f:
                 user = json.load(f)
         except (OSError, ValueError):
             user = {}

@@ -1083,6 +1083,28 @@ def test_foreground_exe_contract():
     print("foreground_exe contract OK")
 
 
+def test_settings_bom_tolerant(tmp):
+    """Regression for v1.9.18 live incident: PowerShell Set-Content -Encoding
+    UTF8 writes a BOM; plain utf-8 load kept \\ufeff in the first key name and
+    Settings silently fell back to ALL defaults (token gone -> open dashboard)."""
+    import json as _json
+    import os
+
+    p = os.path.join(tmp, "settings_bom.json")
+    data = {"dashboard": {"token": "abc123", "allow_control": True},
+            "power": True}
+    with open(p, "w", encoding="utf-8-sig") as f:   # writes BOM
+        _json.dump(data, f)
+    s = config.Settings(p)
+    assert s.get("dashboard", {}).get("token") == "abc123", s.get("dashboard")
+
+    with open(p, "w", encoding="utf-8") as f:       # no BOM still fine
+        _json.dump(data, f)
+    s2 = config.Settings(p)
+    assert s2.get("dashboard", {}).get("token") == "abc123"
+    print("settings BOM-tolerant OK")
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="clevo_test_")
     test_health_check_roundtrip(tmp)
@@ -1116,6 +1138,7 @@ def main():
     test_dashboard_token_and_lan_fallback(tmp)
     test_fan_controller()
     test_foreground_exe_contract()
+    test_settings_bom_tolerant(tmp)
     print("ALL CONFIG/DAEMON MIXIN TESTS PASSED")
 
 
