@@ -150,6 +150,10 @@
     <tr><td><code>0xCE / 0xCF</code></td><td><code>DUT1 / DUT2</code></td><td>duty พัดลม CPU / GPU (0–255) — <span class="warn">เซลล์ telemetry ที่ EC เขียนเอง</span></td></tr>
     <tr><td><code>0xD0 / 0xD2</code></td><td><code>RPM1 / RPM2</code> (16-bit)</td><td>ความเร็วพัดลม (endianness auto-detect)</td></tr>
   </table>
+  <h3>5.2 Fan tachometer mirror (ค้นพบ + แก้แล้ว, v1.9.10)</h3>
+  <p>การดัมพ์ raw (<code>ec_fan_dump.py</code> / <code>ec_fan_loadtest.py</code> — อ่านอย่างเดียว) พบว่าบางช่วงเวลา EC <b>สะท้อนค่าพัดลมเดียวไปทั้งสองช่อง</b> — <code>RPM1[0xD0] = RPM2[0xD2]</code> และ <code>DUT1[0xCE] = DUT2[0xCF]</code> เท่ากันเป๊ะทุก sample (เช่น <code>05 05</code> = 1285 @ duty 5% idle) ส่วนค่า <code>3 ↔ 771</code> ที่เคยอ่านได้คือ <b>transient ของ tachometer</b> ไม่ใช่พัดลมหยุดหมุน</p>
+  <p>→ <code>read_fan_once</code> ตรวจ mirror (RPM + raw duty เท่ากันเป๊ะและไม่ใช่ศูนย์) แล้วรายงาน GPU fan = 0 — Dashboard ไม่แสดงพัดลมหลอก · unit test <code>mirror-collapse</code> ครอบ · ยืนยันบนเครื่องจริง: <code>cpu_rpm ≈ 1450, gpu_rpm = 0</code></p>
+  </table>
   <blockquote><b>Fan control: proven absent</b> (ทดลองบนเครื่องจริง, v1.9.1) — หลักฐาน 3 ชั้น:
     <ol>
       <li>เขียน DUT1=65% ครั้งเดียว → EC ดึงกลับเป็น ~30% ภายใน ~1 วินาที</li>
@@ -171,10 +175,11 @@
    ├── clevo_daemon.py ─ restore/hotkeys/tray/automation/health
    │                      + dashboard(localhost:8787) + toast + watchdog
    ├── GUI (tkinter) + launcher + PyInstaller onefile + Inno Setup
-   └── tests: offline mocks + AST audit + GUI smoke test 58 ขั้น</code></pre>
+   └── tests: offline mocks + AST audit + live smoke 13 ขั้น</code></pre>
   <div class="grid">
     <div class="mini"><b>ทำไม EC ตรง</b><br><span class="muted">ช่องทางทางการใช้ไม่ได้ทั้งหมดบน BIOS นี้ (หัวข้อ 2)</span></div>
     <div class="mini"><b>ทำไม daemon แยก</b><br><span class="muted">hotkeys/restore ต้องรันตลอดโดยไม่เปิด GUI</span></div>
+    <div class="mini"><b>ทำไม live smoke test (<code>smoke_test.py</code>)</b><br><span class="muted">อัปเกรด/ติดตั้งแล้วต้องรู้ทันทีว่า API + EC + dashboard ยังตอบครบ — 13 เช็คกับ daemon ที่รันอยู่ · auto-skip เมื่อไม่มี daemon · <code>python smoke_test.py [--port 8787]</code></span></div>
     <div class="mini"><b>ทำไม offline tests</b><br><span class="muted">EC ต้อง admin + แตะฮาร์ดแวร์ — mock ให้ทดสอบโปรโตคอลได้ทุกวัน</span></div>
   </div>
 </section>
@@ -188,6 +193,7 @@
     <tr><td>🌡️ Temp reactive</td><td>EC 0x07 → gradient + alarm blink</td><td class="ok">อ่านจริง 44–51°C ตรง Windows</td></tr>
     <tr><td>🎛️ Profiles/Automation</td><td>game auto-profile · schedule ข้ามเที่ยงคืน · battery-aware</td><td class="ok">smoke test 58 ขั้น PASS</td></tr>
     <tr><td>🩺 Health/Dashboard</td><td>status.json + history.json + localhost:8787 + toast</td><td class="ok">/api/status ตอบจริง ec_ok:true</td></tr>
+    <tr><td>🚀 Release engineering</td><td>รีโมตสลับ engine · ตั้งค่าแจ้งเตือนบนเว็บ (toast/Discord/Telegram) · event log JSONL + viewer · auto-update checker (opt-in) + ปุ่มดาวน์โหลด · <b>CI สร้าง release เองจาก tag</b> (Actions + Inno Setup)</td><td class="ok">v1.9.10 ปล่อยโดย CI · อัปเกรดเครื่องนี้จาก zip ของ release จริง</td></tr>
   </table>
 </section>
 
@@ -201,6 +207,8 @@
     <tr><td><code>CreateWindowExW failed</code> (monitor ตายมาตั้ง v1.1)</td><td>hInstance ต้อง set + HWND ต้องมี prototype (64-bit)</td></tr>
     <tr><td>wrapper stdout ปิด buffer ร่วมกัน (pythonw)</td><td>ใช้ <code>sys.stdout.detach()</code> ก่อน re-wrap</td></tr>
     <tr><td><code>engine_start</code> ใช้ kb ก่อน connect</td><td>unit test จับได้ก่อนขึ้นเครื่องจริง — เพิ่มชุด mixin tests</td></tr>
+    <tr><td>uninstaller ลบ Scheduled Task ชื่อชน (<code>ClevoBacklightDaemon</code> ใช้ทั้ง installer และโปรเจกต์)</td><td>แยกชื่อ task installer = <code>ClevoBacklightAutostart</code> + <b>ทดสอบ install→uninstall จริงทุกรอบ</b> (จับได้ตอนทดสอบ 1.9.7)</td></tr>
+    <tr><td>ISCC รุ่นใหม่ไม่รู้จัก flag <code>uncheckedonce</code></td><td>ใช้ flag มาตรฐาน + ทดสอบ <code>/D</code> version override กับ ISCC จริงก่อนใส่ CI</td></tr>
   </table>
 </section>
 
@@ -214,7 +222,7 @@
   </ul>
 </section>
 
-<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · 2026-09-17</footer>
+<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.10)</footer>
 </div>
 </body>
 </html>

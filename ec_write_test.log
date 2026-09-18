@@ -1,8 +1,0 @@
-step 1: brightness -> 63 (dimmest)
-  sent: FDAT=0x06 FBUF=63 FBF1=0 FBF2=63 FCMD=0xCA
-step 2: holding 10s (watch the keyboard!)...
-step 3: mailbox read-back attempts for brightness reg
-  via FBUF id 0x06 -> FDAT = 0x6
-  via FDAT id 0x06 -> FDAT = 0x6
-step 4: restore brightness -> 189 (mid)
-DONE

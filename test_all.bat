@@ -8,17 +8,20 @@ rem    [4/7] offline music engine tests (mock EC + synthetic audio)
 rem    [5/7] offline ambient engine tests
 rem    [6/7] offline temperature engine tests
 rem    [7/7] config validation + daemon mixin + fan controller tests (offline)
+rem    [8/8] live smoke test vs running daemon (auto-skip if none on :8787)
 rem  Run before every exe build. Exit code 0 = all good.
 rem ============================================================
 setlocal
 set "HERE=%~dp0"
 set "PY=C:\opencv\venv312\Scripts\python.exe"
 if not exist "%PY%" set "PY=python.exe"
+set "SMOKE_PORT=8787"
+if not "%~1"=="" set "SMOKE_PORT=%~1"
 
 cd /d "%HERE%"
 
 echo [1/7] compile all modules...
-"%PY%" -m py_compile clevo_ec.py clevo_backlight_gui.py clevo_daemon.py config.py hotkeys.py clevo_music.py clevo_ambient.py clevo_temp.py clevo_fan.py ec_sensor_finder.py ec_fan_dump.py ec_fan_loadtest.py launcher.py test_clevo_ec_offline.py test_clevo_music.py test_clevo_ambient.py test_clevo_temp.py test_config_and_daemon.py test_clevo_fan.py audit_self_attrs.py
+"%PY%" -m py_compile clevo_ec.py clevo_backlight_gui.py clevo_daemon.py config.py hotkeys.py clevo_music.py clevo_ambient.py clevo_temp.py clevo_fan.py ec_sensor_finder.py ec_fan_dump.py ec_fan_loadtest.py launcher.py smoke_test.py test_clevo_ec_offline.py test_clevo_music.py test_clevo_ambient.py test_clevo_temp.py test_config_and_daemon.py test_clevo_fan.py audit_self_attrs.py
 if errorlevel 1 goto :fail
 
 echo [2/7] AST audit (missing attributes)...
@@ -44,6 +47,16 @@ if errorlevel 1 goto :fail
 echo [7/7] config + daemon mixin tests...
 "%PY%" test_config_and_daemon.py
 if errorlevel 1 goto :fail
+
+rem --- [8/8] live smoke test: only when a daemon answers on the dashboard port ---
+echo [8/8] live smoke test vs running daemon...
+"%PY%" -c "import socket;s=socket.socket();s.settimeout(0.5);import sys;sys.exit(0 if s.connect_ex(('127.0.0.1',%SMOKE_PORT%))==0 else 1)"
+if errorlevel 1 (
+    echo   skip - no daemon listening on 127.0.0.1:%SMOKE_PORT%
+) else (
+    "%PY%" smoke_test.py --port %SMOKE_PORT%
+    if errorlevel 1 goto :fail
+)
 
 echo.
 echo ALL CHECKS PASSED

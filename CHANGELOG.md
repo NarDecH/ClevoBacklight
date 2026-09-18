@@ -2,6 +2,19 @@
 
 รูปแบบอ้างอิง [Keep a Changelog](https://keepachangelog.com/) — เวอร์ชันตามเสถียรภาพของฟีเจอร์ (ไม่มี release สาธารณะ ใช้ภายในเครื่อง)
 
+## [1.9.11] — 2026-09-18
+
+### Added
+- **`smoke_test.py` — end-to-end smoke test กับ daemon ที่รันอยู่**: token auth, dashboard HTML, API ครบทุก endpoint (status/daily/history.csv/notify-config/events/events.jsonl/update/weekly), ค่า EC สมเหตุสมผล, POST ไม่ 500 — exit code ชัดเจน ใช้เป็น gate หลัง deploy/อัปเกรดได้ (`python smoke_test.py [--port 8787] [--token …] [--no-ec]`)
+- test_all.bat ขั้น **[8/8]**: รัน smoke อัตโนมัติเมื่อมี daemon ฟังพอร์ตอยู่ (auto-skip เมื่อไม่มี — ไม่พังบน CI)
+
+### Changed
+- เก็บกวาด repo: ลบ bat release script รุ่นเก่า 10 ไฟล์ + สคริปต์ทดสอบครั้งเดียว, เลิก track log 7 ไฟล์ (ปิดรูด้วย `*.log` ใน .gitignore), ลบ zip release เก่าในเครื่อง 13 ไฟล์ (~350 MB — ตัวจริงอยู่บน GitHub Releases แล้ว)
+- RESEARCH.md + docs/research.html: เพิ่มผลวิจัย fan tachometer mirror (v1.9.10), ส่วน release engineering, บั๊ก task-ชน/ISCC flag
+
+### Fixed
+- smoke_test.py ทน network hiccup (WinError 10053): retry ×2 + fail-soft แทน traceback
+
 ## [1.9.10] — 2026-09-17
 
 ### Added

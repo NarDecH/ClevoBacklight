@@ -44,3 +44,8 @@ acpi_table_0_DSDT.aml
 .freebuff/
 events.jsonl
 daily_stats.json
+ec_*_test.log
+fan_test.log
+daemon.log
+gui_smoke_test.log
+*.log

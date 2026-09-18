@@ -76,6 +76,12 @@
 | 0xCE / 0xCF | `DUT1` / `DUT2` | duty พัดลม CPU / GPU (0–255) — **เซลล์ telemetry ที่ EC เขียนเอง** |
 | 0xD0 / 0xD2 | `RPM1` / `RPM2` (16-bit) | ความเร็วพัดลม (endianness auto-detect) |
 
+#### Fan tachometer mirror (ค้นพบ + แก้แล้ว, v1.9.10)
+
+การดัมพ์ raw (`ec_fan_dump.py` / `ec_fan_loadtest.py`, อ่านอย่างเดียว) พบว่าบางช่วงเวลา EC **สะท้อนค่าพัดลมเดียวไปทั้งสองช่อง** — `RPM1[0xD0]` = `RPM2[0xD2]` และ `DUT1[0xCE]` = `DUT2[0xCF]` เท่ากันเป๊ะทุก sample (เช่น `05 05` = 1285 @ duty 5% idle) ขณะที่ค่า `3 ↔ 771` ที่เคยอ่านได้คือ **transient ของ tachometer** ไม่ใช่พัดลมหยุดหมุน
+
+→ `read_fan_once` จึงตรวจ mirror (RPM + raw duty เท่ากันเป๊ะทั้งคู่ และไม่ใช่ศูนย์) แล้วรายงาน GPU fan = 0 — Dashboard ไม่แสดงพัดลมหลอก · มี unit test `mirror-collapse` ครอบ · ยืนยันบนเครื่องจริง: `cpu_rpm ≈ 1450, gpu_rpm = 0` ตามสถาปัตยกรรมพัดลมเดียวของเครื่อง
+
 #### Fan control: proven absent (ทดลองบนเครื่องจริง, v1.9.1)
 
 หลักฐาน 3 ชั้นว่า**เขียนสั่งพัดลมผ่าน EC RAM ไม่ได้บนเฟิร์มแวร์นี้**:
@@ -97,12 +103,13 @@
 ├─ clevo_daemon.py ─ restore/hotkeys/tray/automation/     │
 │     health/dashboard/toast/watchdog                      │
 ├─ GUI (tkinter) + launcher + PyInstaller onefile          │
-└─ tests: offline mocks + AST audit + smoke test 58 ขั้น  ─┘
+└─ tests: offline mocks + AST audit + live smoke 13 ขั้น   ─┘
 ```
 
 - **ทำไม EC ตรง:** ช่องทางทางการใช้ไม่ได้ทั้งหมดบน BIOS นี้ (หัวข้อ 2)
 - **ทำไม daemon แยก:** hotkeys/restore ต้องทำงานตลอดโดยไม่เปิด GUI
 - **ทำไม offline tests:** EC ต้องใช้ admin + แตะฮาร์ดแวร์จริง — mock ให้ทดสอบโปรโตคอลได้ทุกวัน
+- **ทำไม live smoke test (`smoke_test.py`):** อัปเกรด/ติดตั้ง daemon แล้วต้องรู้**ทันที**ว่า API + EC + dashboard ยังตอบครบ — 13 เช็คกับ daemon ที่รันอยู่ (token/endpoint/ค่าสมเหตุสมผล) รันเองใน test_all เมื่อมี daemon อยู่เบื้องหลัง และใช้เป็น gate หลัง deploy ได้
 
 ## 7) ฟีเจอร์วิจัยเสริมที่ทำจริง
 
@@ -111,6 +118,7 @@
 - **Automation:** game auto-profile (foreground .exe ทุก 5 วิ), day schedule ข้ามเที่ยงคืน, battery-aware (AC/แบต)
 - **Health + Dashboard + Toast** (v1.7–1.8): status.json, history.json, เซิร์ฟเวอร์ localhost:8787, PowerShell WinRT toast
 - **Hardware profiles:** map เซ็นเซอร์ต่อรุ่น (`hardware.profile`) + `--dump-ec`/`--diff` หาเซ็นเซอร์เครื่องใหม่
+- **Release engineering (v1.9.6–1.9.10):** รีโมตสลับ engine จาก dashboard (music/ambient/temp), ตั้งค่า + ปุ่มทดสอบการแจ้งเตือนบนเว็บ (toast/Discord/Telegram), event log JSONL พร้อม viewer, auto-update checker (opt-in — เช็ค GitHub release ทุก 6 ชม. + ปุ่มดาวน์โหลด), **CI สร้าง release เองทั้ง exe + installer จาก tag** (GitHub Actions + Inno Setup) — พิสูจน์ด้วย v1.9.10 ที่ release/อัปเกรดเครื่องนี้จาก zip ของ release จริง
 
 ## 8) บั๊กที่ค้นพบ + บทเรียน
 
@@ -121,6 +129,8 @@
 | `self._stop` ทับ `Thread._stop()` → `join()` พัง | ตั้งชื่อ `_stop_ev` + auditor ห้ามชื่อนี้ |
 | `CreateWindowExW failed` (monitor ตายมาตั้ง v1.1) | hInstance ต้อง set + HWND 64-bit ต้องมี prototype |
 | stdout `detach()` กันปิด buffer ร่วมกัน | wrapper stdout ภายใต้ pythonw ต้องระวัง ownership |
+| uninstaller ลบ Scheduled Task ชื่อชน (`ClevoBacklightDaemon` ใช้ทั้ง installer และโปรเจกต์) | แยกชื่อ task installer = `ClevoBacklightAutostart` + **ทดสอบ install→uninstall จริงทุกรอบ** (จับได้ตอนทดสอบ 1.9.7) |
+| `ISCC` รุ่นใหม่ไม่รู้จัก flag `uncheckedonce` | ใช้ flag มาตรฐาน + ทดสอบ `/D` version override กับ ISCC จริงก่อนใส่ CI |
 
 ## 9) ช่องทางที่ "ยังเปิด" สำหรับงานต่อ
 
@@ -129,4 +139,4 @@
 - ❌ ~~fan control~~ — **พิสูจน์แล้วว่าทำไม่ได้บนเฟิร์มแวร์นี้** (v1.9.1 จึงเปลี่ยน `clevo_fan.py` เป็น monitor อ่านอย่างเดียว — ดูหัวข้อ "Fan control: proven absent")
 
 ---
-*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · 2026-09-17*
+*รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.10) · หน้าเว็บฉบับสวย: `docs/research.html`*
