@@ -27,11 +27,14 @@ for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "$p='%HERE%dis
 cd /d "%HERE%"
 
 echo [1/7] compile all modules...
-"%PY%" -m py_compile clevo_ec.py clevo_backlight_gui.py clevo_daemon.py config.py hotkeys.py clevo_music.py clevo_ambient.py clevo_temp.py clevo_fan.py ec_sensor_finder.py ec_fan_dump.py ec_fan_loadtest.py launcher.py smoke_test.py test_auth_guard.py test_clevo_ec_offline.py test_clevo_music.py test_clevo_ambient.py test_clevo_temp.py test_config_and_daemon.py test_clevo_fan.py audit_self_attrs.py
+"%PY%" -m py_compile clevo_ec.py clevo_backlight_gui.py clevo_daemon.py config.py hotkeys.py clevo_music.py clevo_ambient.py clevo_temp.py clevo_fan.py ec_sensor_finder.py ec_fan_dump.py ec_fan_loadtest.py launcher.py smoke_test.py test_auth_guard.py test_clevo_ec_offline.py test_clevo_music.py test_clevo_ambient.py test_clevo_temp.py test_config_and_daemon.py test_clevo_fan.py audit_self_attrs.py audit_locks.py
 if errorlevel 1 goto :fail
 
 echo [2/7] AST audit (missing attributes)...
 "%PY%" audit_self_attrs.py
+if errorlevel 1 goto :fail
+echo [2b/7] lock audit (self-deadlock guard, v1.9.13 lesson)...
+"%PY%" audit_locks.py
 if errorlevel 1 goto :fail
 
 echo [3/7] offline EC protocol tests...

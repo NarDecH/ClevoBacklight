@@ -2,6 +2,15 @@
 
 รูปแบบอ้างอิง [Keep a Changelog](https://keepachangelog.com/) — เวอร์ชันตามเสถียรภาพของฟีเจอร์ (ไม่มี release สาธารณะ ใช้ภายในเครื่อง)
 
+## [1.9.14] — 2026-09-18
+
+### Added
+- **การ์ดคุมไฟครบสมบูรณ์บน Dashboard** — เพิ่ม**สไลเดอร์ความสว่าง 0–3** (ส่งคำสังตอนปล่อยนิ้ว + แสดงระดับปัจจุบันจาก `/api/status.brightness`) และ**ปุ่มโปรไฟล์ทุกตัวในการ์ดเดียว** พร้อมไฮไลต์โปรไฟล์ที่ใช้งาน (`/api/status.profile`)
+- **Lock auditor** (`audit_locks.py`) — กัน deadlock ซ้ำถาวร: จับ `self.connect()` ภายใต้ `with self.lock:` (บทเรียน v1.9.13) ทำงานอัตโนมัติใน test_all (ขั้น 2b) พร้อม self-test ยืนยันว่า flag เคสผิดและผ่านเคสถูก
+
+### Fixed
+- **สลับโปรไฟล์จากรีโมตไม่ mark เป็น active** — เดิม remote ใช้ `apply_state` ตรง ๆ ทำให้ไฟเปลี่ยนแต่ไฮไลต์/`active_profile` ค้างเดิม — เปลี่ยนเป็น `apply_profile` (mark + save + push ครบ) · `/api/status` ส่ง `profile` + `brightness` ให้การ์ดใช้
+
 ## [1.9.13] — 2026-09-18
 
 ### Fixed

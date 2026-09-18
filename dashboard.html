@@ -112,12 +112,14 @@
     <div style="flex:1.4 1 260px; display:flex; flex-direction:column; gap:8px; justify-content:center">
       <div style="display:flex; gap:8px; align-items:center">
         <span class="k" style="min-width:64px">ความสว่าง</span>
-        <button class="chip" data-bright="0">0</button>
-        <button class="chip" data-bright="1">1</button>
-        <button class="chip" data-bright="2">2</button>
-        <button class="chip" data-bright="3">3</button>
+        <input type="range" id="brightSlider" min="0" max="3" step="1" value="0" style="flex:1">
+        <span class="chip on" id="brightVal">0</span>
       </div>
-      <div class="k" id="bigPowerMsg" style="color:var(--mut)">ปุ่มใหญ่ = เปิด/ปิดไฟทั้งแถบ · สถานะอัปเดตทุก 5 วิ</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap" id="profRow">
+        <span class="k" style="min-width:64px">โปรไฟล์</span>
+        <span id="profBtns2"></span>
+      </div>
+      <div class="k" id="bigPowerMsg" style="color:var(--mut)">ปุ่มใหญ่ = เปิด/ปิดไฟทั้งแถบ · สไลเดอร์ = ความสว่าง 0–3 · สถานะอัปเดตทุก 5 วิ</div>
     </div>
   </div>
 </div>
@@ -473,8 +475,31 @@ function showPower(d){
   b.style.borderColor = on ? 'var(--acc)' : 'var(--line)';
   b.style.color = on ? 'var(--acc)' : 'var(--mut)';
   b.onclick = () => sendCmd({action:'power', value: !on});
-  document.querySelectorAll('#powerPanel [data-bright]').forEach(x => {
-    x.onclick = () => sendCmd({action:'brightness', value:+x.dataset.bright});
+  // brightness slider (send on release)
+  const s = $('brightSlider');
+  s.value = (d.brightness !== undefined) ? d.brightness : s.value;
+  $('brightVal').textContent = s.value;
+  if (!s.dataset.bound){
+    s.dataset.bound = '1';
+    s.addEventListener('change', () => {
+      sendCmd({action:'brightness', value:+s.value});
+      $('brightVal').textContent = s.value;
+    });
+  }
+  // profile buttons (built once from profiles list, highlight follows state)
+  const holder = $('profBtns2');
+  if (!holder.dataset.built){
+    holder.dataset.built = '1';
+    (d.profiles || []).forEach(name => {
+      const pb = document.createElement('button');
+      pb.className = 'chip'; pb.textContent = name; pb.dataset.prof = name;
+      pb.onclick = () => sendCmd({action:'profile', name});
+      holder.appendChild(pb);
+    });
+  }
+  holder.querySelectorAll('[data-prof]').forEach(pb => {
+    const active = d.profile && d.profile === pb.dataset.prof;
+    pb.className = 'chip' + (active ? ' on' : '');
   });
 }
 

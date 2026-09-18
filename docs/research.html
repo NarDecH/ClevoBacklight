@@ -212,7 +212,7 @@
     <tr><td>uninstaller ลบ Scheduled Task ชื่อชน (<code>ClevoBacklightDaemon</code> ใช้ทั้ง installer และโปรเจกต์)</td><td>แยกชื่อ task installer = <code>ClevoBacklightAutostart</code> + <b>ทดสอบ install→uninstall จริงทุกรอบ</b> (จับได้ตอนทดสอบ 1.9.7)</td></tr>
     <tr><td>ISCC รุ่นใหม่ไม่รู้จัก flag <code>uncheckedonce</code></td><td>ใช้ flag มาตรฐาน + ทดสอบ <code>/D</code> version override กับ ISCC จริงก่อนใส่ CI</td></tr>
     <tr><td>battery automation ตายเงียบมาตั้งแต่ v1.6 (thread crash รอบเดียว)</td><td>struct ของ <code>GetSystemPowerStatus</code> ต้องเป็น <code>ctypes.Structure</code> — plain class มี <code>_fields_</code> ทำ <code>byref()</code> throw ทันที · AST audit จับไม่ได้ (runtime type) — ต้องมี unit test เรียก <code>_power_status()</code> ตรง ๆ (แก้ + จับได้ v1.9.12)</td></tr>
-    <tr><td><b>remote control deadlock</b> (v1.9.12, จับตัวด้วย py-spy)</td><td>ห้ามเรียก <code>connect()</code> ขณะถือ <code>self.lock</code> — non-reentrant lock ขอซ้ำ = ค้างถาวร + ลาก health/watchdog/POST แข็งตามทั้งโปรเซส · <b>py-spy dump บน daemon จริงคือเครื่องมือชี้ขาด</b></td></tr>
+    <tr><td><b>remote control deadlock</b> (v1.9.12, จับตัวด้วย py-spy)</td><td>ห้ามเรียก <code>connect()</code> ขณะถือ <code>self.lock</code> — non-reentrant lock ขอซ้ำ = ค้างถาวร + ลาก health/watchdog/POST แข็งตามทั้งโปรเซส · <b>py-spy dump บน daemon จริงคือเครื่องมือชี้ขาด</b> · กันซ้ำถาวร: <code>audit_locks.py</code> สแกนอัตโนมัติใน test_all (v1.9.14)</td></tr>
     <tr><td>battery loop re-apply ทุก 10 วิบน AC (v1.9.12)</td><td>dedup ใช้ <code>on is False</code> ผิดขั้ว (<code>on</code> = ใช้แบต) → เขียน EC ไม่จำเป็น + แย่ง lock — dedup ต้องทดสอบทั้งสองขั้วของตัวแปรสถานะ</td></tr>
   </table>
 </section>
@@ -227,7 +227,19 @@
   </ul>
 </section>
 
-<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.10)</footer>
+<section id="s10">
+  <h2><span class="no">10</span> สรุปสุขภาพระบบจาก log จริง (audit 24 ชม., v1.9.13)</h2>
+  <table>
+    <tr><th>หมวด</th><th>ผล</th><th>หมายเหตุ</th></tr>
+    <tr><td>daemon start</td><td class="ok">13 ครั้ง</td><td>ส่วนใหญ่จากวงจรทดสอบสลับเวอร์ชัน</td></tr>
+    <tr><td>EC fail / recover</td><td class="ok">0</td><td>ธุรกรรม EC นิ่งทั้ง 24 ชม.</td></tr>
+    <tr><td>auth_fail</td><td>6 ครั้ง</td><td><b>ทั้งหมดจาก 127.0.0.1</b> = traffic ทดสอบของโปรเจกต์เอง ไม่มีผู้ไม่หวังดีจริง</td></tr>
+    <tr><td>error ใน daemon.log</td><td>2 ครั้ง</td><td><code>CreateWindowExW failed</code> (16–17 ก.ย.) — monitor ปิดตัวเองอย่างปลอดภัย ไม่กระทบ daemon</td></tr>
+  </table>
+  <p class="muted">→ ระบบหลัง deploy v1.9.13 ทำงานสะอาด · events.jsonl ใช้ตรวจย้อนหลังได้จริง (viewer/filter บน dashboard หรือ CLI <code>--export-events</code>)</p>
+</section>
+
+<footer>Clevo Backlight Controller · RESEARCH.md (ฉบับเต็มในไฟล์) · ทุกตัวเลขมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.13)</footer>
 </div>
 </body>
 </html>

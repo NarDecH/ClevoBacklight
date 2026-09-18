@@ -134,7 +134,7 @@
 | uninstaller ลบ Scheduled Task ชื่อชน (`ClevoBacklightDaemon` ใช้ทั้ง installer และโปรเจกต์) | แยกชื่อ task installer = `ClevoBacklightAutostart` + **ทดสอบ install→uninstall จริงทุกรอบ** (จับได้ตอนทดสอบ 1.9.7) |
 | `ISCC` รุ่นใหม่ไม่รู้จัก flag `uncheckedonce` | ใช้ flag มาตรฐาน + ทดสอบ `/D` version override กับ ISCC จริงก่อนใส่ CI |
 | battery automation ตายเงียบมาตั้งแต่ v1.6 (thread crash รอบเดียวแล้วหายไป) | struct ของ `GetSystemPowerStatus` ต้องเป็น `ctypes.Structure` — plain class ที่มี `_fields_` ทำ `byref()` throw ทันที · AST audit จับไม่ได้ (runtime type) — ต้องมี unit test เรียก `_power_status()` ตรง ๆ (แก้ + จับได้ v1.9.12) |
-| **remote control deadlock** (v1.9.12, จับตัวด้วย py-spy) | ห้ามเรียก `connect()` ขณะถือ `self.lock` — `threading.Lock` เป็น non-reentrant, `connect()` ขอ lock เดิมซ้ำ = ค้างถาวร + ลาก health/watchdog/POST แข็งตามทั้งโปรเซส · py-spy dump บน daemon จริงคือเครื่องมือชี้ขาด (ทุก thread ยืนที่ `connect` บรรทัดเดียวกัน) |
+| **remote control deadlock** (v1.9.12, จับตัวด้วย py-spy) | ห้ามเรียก `connect()` ขณะถือ `self.lock` — `threading.Lock` เป็น non-reentrant, `connect()` ขอ lock เดิมซ้ำ = ค้างถาวร + ลาก health/watchdog/POST แข็งตามทั้งโปรเซส · py-spy dump บน daemon จริงคือเครื่องมือชี้ขาด (ทุก thread ยืนที่ `connect` บรรทัดเดียวกัน) · **กันซ้ำถาวร: `audit_locks.py` สแกน pattern นี้อัตโนมัติใน test_all ทุกครั้ง (v1.9.14)** |
 | battery loop re-apply ทุก 10 วิบน AC (v1.9.12) | เงื่อนไข dedup ใช้ `on is False` ผิดขั้ว (`on` = ใช้แบต) → `level_changed` True ตลอดบน AC = เขียน EC ไม่จำเป็น + แย่ง EC lock — dedup ต้องทดสอบทั้งสองขั้วของตัวแปรสถานะ |
 
 ## 9) ช่องทางที่ "ยังเปิด" สำหรับงานต่อ
@@ -142,6 +142,18 @@
 - เพิ่ม map เซ็นเซอร์/คำสั่งรุ่นอื่นใน `clevo_temp.HW_DEFAULTS` (ใช้ `ec_sensor_finder.py` หรือ `--dump-ec --diff` สำรวจ)
 - อ่านค่ากลับจาก mailbox (`FCMD=0xB8` — pattern ใน DSDT บรรทัด 23535/24376)
 - ❌ ~~fan control~~ — **พิสูจน์แล้วว่าทำไม่ได้บนเฟิร์มแวร์นี้** (v1.9.1 จึงเปลี่ยน `clevo_fan.py` เป็น monitor อ่านอย่างเดียว — ดูหัวข้อ "Fan control: proven absent")
+
+## 10) สรุปสุขภาพระบบจาก log จริง (audit 24 ชม., v1.9.13)
+
+| หมวด | ผล | หมายเหตุ |
+|---|---|---|
+| daemon start | 13 ครั้ง | ส่วนใหญ่จากวงจรทดสอบสลับเวอร์ชัน |
+| EC fail / recover | **0** | ธุรกรรม EC นิ่งทั้ง 24 ชม. |
+| engine stop ผิดปกติ | 0 | — |
+| `auth_fail` | 6 ครั้ง | **ทั้งหมดจาก 127.0.0.1** = traffic ทดสอบของโปรเจกต์เอง ไม่มีผู้ไม่หวังดีจริง |
+| error ใน daemon.log | 2 ครั้ง | `CreateWindowExW failed; monitor disabled` (16–17 ก.ย.) — monitor ปิดตัวเองอย่างปลอดภัย, ไม่กระทบ daemon |
+
+→ ระบบหลัง deploy v1.9.13 ทำงานสะอาด · events.jsonl ใช้ตรวจย้อนหลังได้จริง (viewer/filter บน dashboard หรือ CLI `--export-events`)
 
 ---
 *รวบรวมอัตโนมัติจากบันทึกโปรเจกต์ · ทุกค่าในตารางมาจากการทดลองจริงบน N957TP6 · อัปเดตล่าสุด 2026-09-18 (v1.9.13) · หน้าเว็บฉบับสวย: `docs/research.html`*

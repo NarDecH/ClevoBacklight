@@ -941,9 +941,9 @@ class Daemon:
                 profs = self.settings.get("profiles")
                 if name not in profs:
                     raise ValueError("unknown profile %r" % name)
-                prof = json.loads(json.dumps(profs[name]))
-                prof["power"] = True
-                config.apply_state(kb, prof)
+                # apply_profile marks it active + saves + pushes to the EC
+                # (a plain apply_state would leave the highlight stale)
+                config.apply_profile(kb, self.settings, name)
             else:
                 raise ValueError("unknown action %r" % action)
         log("remote cmd: %s %s" % (action, payload.get("value",
@@ -1063,6 +1063,8 @@ class Daemon:
         if self.settings.get("dashboard", {}).get("allow_control"):
             snap["allow_control"] = True
             snap["profiles"] = sorted(self.settings.get("profiles", {}))
+            snap["brightness"] = int(self.settings.get("brightness", 0))
+            snap["profile"] = self.settings.get("active_profile", "")
         if "music" in self.engines:
             rend = self.engines["music"]
             try:
